@@ -1,23 +1,16 @@
-import config
 import json
-from tda import auth, client
+import authentication as auth
+from tda import client
+import plot_candles
 
-try:
-    auth_client = auth.client_from_token_file(config.token_path, config.api_key)
-except FileNotFoundError:
-    from selenium import webdriver
-    with webdriver.Chrome() as driver:
-        auth_client = auth.client_from_login_flow(
-            driver, config.api_key, config.redirect_uri, config.token_path)
+
+auth_client = auth.GetAuthClient()
 
 r = auth_client.get_price_history('AAPL',
-        period_type=client.Client.PriceHistory.PeriodType.YEAR,
+        period_type=client.Client.PriceHistory.PeriodType.DAY,
         period=client.Client.PriceHistory.Period.ONE_DAY,
-        frequency_type=client.Client.PriceHistory.FrequencyType.DAILY,
-        frequency=client.Client.PriceHistory.Frequency.DAILY)
+        # frequency_type=client.Client.PriceHistory.FrequencyType.DAILY,
+        frequency=client.Client.PriceHistory.Frequency.EVERY_FIFTEEN_MINUTES)
 assert r.status_code == 200, r.raise_for_status()
-print(json.dumps(r.json(), indent=4))
-
-# r = auth_client.get_accounts()
-# assert r.status_code == 200, r.raise_for_status()
-# print(json.dumps(r.json(), indent=4))
+price_history = r.json()
+plot_candles.PlotCandles(price_history)
