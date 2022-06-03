@@ -1,22 +1,34 @@
 #region imports
 from AlgorithmImports import *
+import enum
 #endregion
+
+# self.Log("V" + str(self.vwap.Current.Value)) # Current VWAP vaule
+ # price = data[self.spy].Close
+# price = self.Securities[self.spy].Close
+class LiquidateState(enum.Enum):
+    Normal = 1 # 'It is not mandatory to liquidate'
+    ToWin = 2  # 'It is mandatory to liquidate if there is a win or there is not a loss. Equity current price >= entry price' 
+    Force = 3  # 'Liquidate the equity now'
+
 class VWAP(QCAlgorithm):
 
     def Initialize(self):
-        self.SetStartDate(2022, 5, 15)  # Set Start Date
-        self.SetEndDate(2022, 5, 18) # Set End Date
+        self.SetStartDate(2021, 1, 1)  # Set Start Date
+        self.SetEndDate(2021, 12, 31) # Set End Date
         self.SetCash(100000)  # Set Strategy Cash
         
-        spy = self.AddEquity("aapl", Resolution.Second)
+        spy = self.AddEquity("NFLX", Resolution.Second)
         spy.SetDataNormalizationMode(DataNormalizationMode.Raw)
         self.spy = spy.Symbol
-        
         self.SetBenchmark(self.spy)
         self.SetBrokerageModel(BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin)
+        
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(self.spy, 5), self.ResetDataAfterMarketOpenHandler)
         
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(self.spy, 0), self.BeforeMarketCloseHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(self.spy, 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(self.spy, 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
 
         # Indicators
         self.vwap = self.VWAP(self.spy)
@@ -35,7 +47,7 @@ class VWAP(QCAlgorithm):
 
         # self.defaultAllowMarketGapPercentToTrade = -1 => 1% <=> gap down
         self.lastDayClosePrice = None
-        self.defaultAllowMarketGapPercentToTrade = 1.5
+        self.defaultAllowMarketGapPercentToTrade = 0.5
         self.allowGapPercentToTrade = 0
         self.isAllowToTradeByGapPercent = False
 
@@ -48,9 +60,11 @@ class VWAP(QCAlgorithm):
         self.windowLowPrice = RollingWindow[TradeBar](1)
         self.Consolidate(self.spy, timedelta(seconds=self.consolidateLowPriceTime), self.LowConsolidateHandler)
 
+        self.LiquidateState = LiquidateState.Normal
+
     def OnData(self, data):
-        if not self.spy in data:
-            return True
+        if not data.Bars.ContainsKey(self.spy):
+            return
 
         price = data.Bars[self.spy].Price
         
@@ -63,9 +77,12 @@ class VWAP(QCAlgorithm):
 
         self.UpdateLastBrokenCandle(self.windowMinute[0])
 
-        # self.Log("V" + str(self.vwap.Current.Value)) # Current VWAP vaule
-        # price = data[self.spy].Close
-        # price = self.Securities[self.spy].Close
+        # Liquidate by time
+        if (self.ShouldLiquidateToWin(price) 
+            or self.ShouldForceLiquidate()):
+            self.Liquidate()
+            return
+        
         if not self.Portfolio.Invested and self.ShouldEnterToBuy(price):
                 self.SetHoldings(self.spy, 1)
                 self.entryPrice = price
@@ -94,18 +111,37 @@ class VWAP(QCAlgorithm):
     def UpdateOpenPriceAfterMarketOpenHandler(self, openDayPrice):
         if self.lastDayClosePrice is None:
             return
-        gapPercent = self.CalcualteMarketGapPercent(self.lastDayClosePrice, openDayPrice)
+        gapPercent = self.CalculateMarketGapPercent(self.lastDayClosePrice, openDayPrice)
         self.isAllowToTradeByGapPercent = gapPercent > self.defaultAllowMarketGapPercentToTrade # add percent per gap. if gapPercent < 2 => means if gap percent is less than 2 percent.
-        self.Log(openDayPrice)
 
     def ResetDataAfterMarketOpenHandler(self):
         self.isAllowToTradeByTime = True
         self.windowMinute = RollingWindow[TradeBar](2)
+        self.LiquidateState = LiquidateState.Normal
 
     def BeforeMarketCloseHandler(self):
         self.isAllowToTradeByTime = False
         self.lastDayClosePrice = self.Securities[self.spy].Price
         self.Log(self.lastDayClosePrice)
+
+    def BeforeMarketCloseTryToLiquidateOnWinStateHandler(self):
+        self.LiquidateState = LiquidateState.ToWin
+
+    def BeforeMarketCloseLiquidateOnDayStateHandler(self):
+        self.LiquidateState = LiquidateState.Force
+
+    def ShouldLiquidateToWin(self, equity_current_price):
+        if (self.LiquidateState is LiquidateState.ToWin
+            and self.Portfolio.Invested
+            and self.entryPrice <= equity_current_price):
+            return True
+        return False
+
+    def ShouldForceLiquidate(self):
+        if (self.LiquidateState is LiquidateState.Force
+            and self.Portfolio.Invested):
+            return True
+        return False
 
     # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
     #     and its Low price is lower than VWAP current value and the same time
@@ -139,5 +175,5 @@ class VWAP(QCAlgorithm):
     def ResetLastTradeTime(self):
         self.lastTrade = self.Time
 
-    def CalcualteMarketGapPercent(self, lastCloseDayPrice, currentDayOpenPrice):
+    def CalculateMarketGapPercent(self, lastCloseDayPrice, currentDayOpenPrice):
         return (currentDayOpenPrice - lastCloseDayPrice)/currentDayOpenPrice*100
