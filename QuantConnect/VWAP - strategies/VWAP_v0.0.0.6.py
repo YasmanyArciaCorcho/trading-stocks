@@ -15,7 +15,7 @@ class VWAP(QCAlgorithm):
 
     def Initialize(self):
         self.SetStartDate(2021, 1, 1)  # Set Start Date
-        self.SetEndDate(2021, 12, 31) # Set End Date
+        self.SetEndDate(2021, 1, 31) # Set End Date
         self.SetCash(100000)  # Set Strategy Cash
         
         spy = self.AddEquity("NFLX", Resolution.Second)
@@ -63,6 +63,9 @@ class VWAP(QCAlgorithm):
 
         self.LiquidateState = LiquidateState.Normal
 
+        # Risk management
+        self.risk_per_trade = 200
+
     def OnData(self, data):
         if not data.Bars.ContainsKey(self.spy):
             return
@@ -85,10 +88,14 @@ class VWAP(QCAlgorithm):
             return
         
         if not self.Portfolio.Invested and self.ShouldEnterToBuy(price):
-                self.SetHoldings(self.spy, 1)
                 self.entryPrice = price
-                self.ResetLastTradeTime()
                 self.entryLowPrice = self.windowLowPrice[0].Low
+                count_actions_to_buy = int(self.risk_per_trade/(self.entryPrice - self.entryLowPrice))
+                self.MarketOrder(self.spy, count_actions_to_buy)
+                self.Log('ep' + str(self.entryPrice))
+                self.Log('elp' + str(self.entryLowPrice))
+                self.Log('atb'+ str(count_actions_to_buy))
+                self.ResetLastTradeTime()
         elif self.Portfolio.Invested:
             if (self.entryLowPrice > price or
             (self.entryPrice + (self.entryPrice - self.entryLowPrice)) < price):
@@ -123,7 +130,6 @@ class VWAP(QCAlgorithm):
     def BeforeMarketCloseHandler(self):
         self.isAllowToTradeByTime = False
         self.lastDayClosePrice = self.Securities[self.spy].Price
-        self.Log(self.lastDayClosePrice)
 
     def BeforeMarketCloseTryToLiquidateOnWinStateHandler(self):
         self.LiquidateState = LiquidateState.ToWin
