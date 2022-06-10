@@ -18,7 +18,7 @@ class VWAP(QCAlgorithm):
         self.SetEndDate(2021, 1, 31) # Set End Date
         self.SetCash(100000)  # Set Strategy Cash
         
-        spy = self.AddEquity("NFLX", Resolution.Second)
+        spy = self.AddEquity("appl", Resolution.Second)
         spy.SetDataNormalizationMode(DataNormalizationMode.Raw)
         self.spy = spy.Symbol
         self.SetBenchmark(self.spy)
@@ -86,15 +86,18 @@ class VWAP(QCAlgorithm):
             or self.ShouldForceLiquidate()):
             self.Liquidate()
             return
+
+        if not self.LiquidateState is LiquidateState.Normal:
+            return
         
         if not self.Portfolio.Invested and self.ShouldEnterToBuy(price):
                 self.entryPrice = price
                 self.entryLowPrice = self.windowLowPrice[0].Low
                 count_actions_to_buy = int(self.risk_per_trade/(self.entryPrice - self.entryLowPrice))
                 self.MarketOrder(self.spy, count_actions_to_buy)
-                self.Log('ep' + str(self.entryPrice))
-                self.Log('elp' + str(self.entryLowPrice))
-                self.Log('atb'+ str(count_actions_to_buy))
+                # self.Log('ep' + str(self.entryPrice))
+                # self.Log('elp' + str(self.entryLowPrice))
+                # self.Log('atb'+ str(count_actions_to_buy))
                 self.ResetLastTradeTime()
         elif self.Portfolio.Invested:
             if (self.entryLowPrice > price or
