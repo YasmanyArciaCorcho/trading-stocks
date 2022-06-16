@@ -4,22 +4,22 @@ import enum
 #endregion
 
 class LiquidateState(enum.Enum):
-    Normal = 1 # 'It is not mandatory to liquidate'
-    ToWin = 2  # 'It is mandatory to liquidate if there is a win or there is not a loss. Equity current price >= entry price' 
-    Force = 3  # 'Liquidate the equity now'
+    Normal = 1 # It is not mandatory to liquidate.
+    ToWin = 2  # It is mandatory to liquidate if there is a win or there is not a loss. Equity current price >= entry price.
+    Force = 3  # Liquidate the equity now.
 
 class VWAP(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 1, 1)   # Set Start Date
-        self.SetEndDate(2021, 1, 31)    # Set End Date
-        self.SetCash(100000)            # Set Strategy Cash
+        self.SetStartDate(2021, 1, 1)   # Set Start Date.
+        self.SetEndDate(2021, 1, 31)    # Set End Date.
+        self.SetCash(100000)            # Set Strategy Cash.
 
         self.stocksTrading = QCStocksTrading(self)
         
         # Region - Initialize trading equities
-        # One equity should be traded at least.
+        ## One equity should be traded at least.
         equity1 = self.AddEquity("spy", Resolution.Second)
         self.stocksTrading.AddEquity(equity1.Symbol, equity1)
 
@@ -27,30 +27,28 @@ class VWAP(QCAlgorithm):
         self.SetBrokerageModel(BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin)
         
         # Region - General configurations
-        ## Sub region - Schedule events
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equity1.Symbol, 5), self.ResetDataAfterMarketOpenHandler)
-        
-        self.endTimeToTradeBeforeMarketClose = 0
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose), self.BeforeMarketCloseHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
-
         # All the variables that manages times are written in seconds.
-        self.ConsolidateSecondsTime = 60
-        self.AccumulatePositiveTimeRan = 0
-        self.ConsolidateLowPriceTime = 60 * 5
+        self.ConsolidateSecondsTime = 60        # Define the one min candle.
+        self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
+        self.AccumulatePositiveTimeRan = 0      # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
         self.IsAllowToTradeByTime = False
 
         self.CurrentTradingDay = -1
 
         self.LiquidateState = LiquidateState.Normal
+
+        ## Sub region - Schedule events
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equity1.Symbol, 5), self.ResetDataAfterMarketOpenHandler)
+        self.endTimeToTradeBeforeMarketClose = 0
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose), self.BeforeMarketCloseHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
         
         # Risk management
         self.RiskPerTrade = 200
 
         # Region - Configuration per symbol
-        # strategy per symbol
         for trading_equity in self.stocksTrading.GetTradingEquities():
             symbol = trading_equity.Symbol()
             # Indicators
@@ -119,11 +117,15 @@ class VWAP(QCAlgorithm):
         gapPercent = self.CalculateMarketGapPercent(trading_equity.LastDayClosePrice, equity_open_day_price)
         trading_equity.IsAllowToTradeByGapPercent = gapPercent > trading_equity.DefaultGapPercentAllowToTrade # add percent per gap. if gapPercent < 2 => means if gap percent is less than 2 percent.
 
+    # Region After Market Open
     def ResetDataAfterMarketOpenHandler(self):
         self.IsAllowToTradeByTime = True
-        self.CurrentTradingWindow = RollingWindow[TradeBar](2)
         self.LiquidateState = LiquidateState.Normal
+        for equity in self.stocksTrading.GetTradingEquities():
+            equity.CurrentTradingWindow = RollingWindow[TradeBar](2)
+    # EndRegion
 
+    # Region - Before market close.
     def BeforeMarketCloseHandler(self):
         self.IsAllowToTradeByTime = False
         for equity in self.stocksTrading.GetTradingEquities():
@@ -134,6 +136,17 @@ class VWAP(QCAlgorithm):
 
     def BeforeMarketCloseLiquidateOnDayStateHandler(self):
         self.LiquidateState = LiquidateState.Force
+    # EndRegion
+
+    # Region Consolidates, update rolling windows
+    def MinuteConsolidateHandler(self, bar):
+        for equity in self.stocksTrading.GetTradingEquities():
+            equity.CurrentTradingWindow.Add(bar)
+
+    def LowConsolidateHandler(self, bar):
+        for equity in self.stocksTrading.GetTradingEquities():
+            equity.LowPriceWindow.Add(bar)
+    # EndRegion
 
     def ShouldLiquidateToWin(self, equity_current_price):
         if (self.LiquidateState is LiquidateState.ToWin
@@ -170,13 +183,6 @@ class VWAP(QCAlgorithm):
         if (trading_equity.LastBrokenCandle is None
             and self.IsPositiveBrokenCandle(current_trading_window)):
             trading_equity.LastBrokenCandle = current_trading_window
-        
-    # Update the rolling windows with the current consolidate.
-    def MinuteConsolidateHandler(self, bar):
-        self.CurrentTradingWindow.Add(bar)
-
-    def LowConsolidateHandler(self, bar):
-        self.LowPriceWindow.Add(bar)
 
     def CalculateMarketGapPercent(self, last_close_day_price, current_day_open_price):
         return (current_day_open_price - last_close_day_price)/current_day_open_price*100
