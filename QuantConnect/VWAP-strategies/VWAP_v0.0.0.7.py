@@ -1,4 +1,5 @@
 #region imports
+from hashlib import new
 from AlgorithmImports import *
 import enum
 #endregion
@@ -21,7 +22,7 @@ class VWAP(QCAlgorithm):
         # Region - Initialize trading equities
         ## One equity should be traded at least.
         equity1 = self.AddEquity("spy", Resolution.Second)
-        self.stocksTrading.AddEquity(equity1.Symbol, equity1)
+        self.stocksTrading.AddEquity(equity1)
 
         # Region - Set Broker configurations
         self.SetBrokerageModel(BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin)
@@ -52,8 +53,8 @@ class VWAP(QCAlgorithm):
         for trading_equity in self.stocksTrading.GetTradingEquities():
             symbol = trading_equity.Symbol()
             # Indicators
-            vwap = self.VWAP(symbol)                                        # The indicator has a field 'name' which returns the indicator name.
-            self.stocksTrading.RegisterIndicatorForEquity('vwap', vwap)     # Maybe we can test if it is a good fit for us. Example vwap.Name
+            # QuantConnect indicators has a field 'name' which returns the indicator name.
+            self.stocksTrading.RegisterIndicatorForEquity(symbol, 'vwap', self.VWAP(symbol))     # Maybe we can test if it is a good fit for us. Example vwap.Name
 
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.MinuteConsolidateHandler)
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateLowPriceTime), self.LowConsolidateHandler)
@@ -85,7 +86,7 @@ class VWAP(QCAlgorithm):
                 return
 
             if (not self.Portfolio[symbol].Invested 
-                and self.ShouldEnterToBuy(equity_current_price)):
+                and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryLowPrice = self.LowPriceWindow[0].Low
                     count_actions_to_buy = int(self.RiskPerTrade/(trading_equity.LastEntryPrice - trading_equity.LastEntryLowPrice))
@@ -103,9 +104,11 @@ class VWAP(QCAlgorithm):
             return True
         if not self.IsAllowToTradeByTime:
             return True
-        if (not trading_equity['vwap'].IsReady or
-            not self.CurrentTradingWindow.IsReady or
-            not self.LowPriceWindow.IsReady):
+        vwap = trading_equity.GetIndicator('vwap')
+        if ((not vwap is None and
+            not vwap.IsReady) or
+            not trading_equity.CurrentTradingWindow.IsReady or
+            not trading_equity.LowPriceWindow.IsReady):
             return True
         if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.ConsolidateSecondsTime:
             return True
@@ -129,7 +132,7 @@ class VWAP(QCAlgorithm):
     def BeforeMarketCloseHandler(self):
         self.IsAllowToTradeByTime = False
         for equity in self.stocksTrading.GetTradingEquities():
-            equity.LastDayClosePrice = self.Securities[equity.Symbol].Price
+            equity.LastDayClosePrice = self.Securities[equity.Symbol()].Price
 
     def BeforeMarketCloseTryToLiquidateOnWinStateHandler(self):
         self.LiquidateState = LiquidateState.ToWin
@@ -164,28 +167,33 @@ class VWAP(QCAlgorithm):
     # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
-    def ShouldEnterToBuy(self, equity, equity_current_price):
-        return (not equity.LastBrokenCandle is None
-            and self.IsPositiveBrokenCandle(equity.CurrentTradingWindow[0])
-            and (equity.CurrentTradingWindow[0].Time - equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
+    def ShouldEnterToBuy(self, trading_equity, equity_current_price):
+        return (not trading_equity.LastBrokenCandle is None
+            and self.IsPositiveBrokenCandle(trading_equity)
+            and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
             and equity_current_price > self.CurrentTradingWindow[0].High) 
    
-    def IsPositiveBrokenCandle(self, candle):
-        return (candle.High > self.vwap.Current.Value
-            and candle.Low < self.vwap.Current.Value         
-            and candle.Close >= self.vwap.Current.Value)
+    def IsPositiveBrokenCandle(self, trading_equity):
+        candle = trading_equity.CurrentTradingWindow[0]
+        vwap = trading_equity.GetIndicator('vwap')
+        return (not vwap is None 
+            and (candle.High > vwap.Current.Value
+            and candle.Low < vwap.Current.Value         
+            and candle.Close >= vwap.Current.Value))
     
     def UpdateLastBrokenCandle(self, trading_equity):
         current_trading_window = trading_equity.CurrentTradingWindow[0]
-        if (not trading_equity.LastBrokenCandle is None 
-            and current_trading_window.Low < self.vwap.Current.Value):
+        vwap = trading_equity.GetIndicator('vwap')
+        if (not vwap is None
+            and not trading_equity.LastBrokenCandle is None 
+            and current_trading_window.Low < vwap.Current.Value):
             trading_equity.LastBrokenCandle = None
         if (trading_equity.LastBrokenCandle is None
-            and self.IsPositiveBrokenCandle(current_trading_window)):
+            and self.IsPositiveBrokenCandle(trading_equity)):
             trading_equity.LastBrokenCandle = current_trading_window
 
     def CalculateMarketGapPercent(self, last_close_day_price, current_day_open_price):
-        return (current_day_open_price - last_close_day_price)/current_day_open_price*100
+        return (current_day_open_price - last_close_day_price) / current_day_open_price * 100
 
 # So far, all prices are based in USD dollar for any field. 
 # self.LastEntryPrice = 1 <=> self.LastEntryPrice = 1 USD
@@ -195,7 +203,7 @@ class EquityTradeModel:
         self.__symbol = symbol
         self.__equity = equity
 
-        self.__indicators = {}
+        self.indicators = {}
 
         self.LastEntryPrice = None
         self.LastEntryLowPrice = None
@@ -218,32 +226,33 @@ class EquityTradeModel:
 
     # Return True if the indicator registered
     def RegisterIndicator(self, indicator_name, indicator):
-        if not indicator_name in self.__indicators:
-            self.__indicators[indicator_name] = indicator
+        if not indicator_name in self.indicators:
+            self.indicators[indicator_name] = indicator
             return True
         return False
     
     # Return True if the indicator unregistered
     def UnRegisterIndicator(self, indicator_name):
-        if indicator_name in self.__indicators:
-            del self.__indicators[indicator_name]
+        if indicator_name in self.indicators:
+            del self.indicators[indicator_name]
             return True
         return False
 
     def SetLastTradeTime(self, time):
         self.LastTradeTime = time
 
-    
     def ResetEquityLastTradeTime(self):
         self.SetLastTradeTime(None)
+
+    def GetIndicator(self, indicator_name):
+        if indicator_name is self.indicators:
+            return self.indicators[indicator_name]
+        return None
        
 class QCEquityTradeModel(EquityTradeModel):
-    def __init__(self, equity, data_normalization_mode):
-        self.super().__init__(equity.Symbol)
+    def __init__(self, equity):
+        EquityTradeModel.__init__(self, equity.Symbol, equity)
         
-        equity.SetDataNormalizationMode(data_normalization_mode)
-        self.SetBenchmark(self.Symbol())
-
         self.LastBrokenCandle = None
         self.CurrentTradingWindow = RollingWindow[TradeBar](2)
         self.LowPriceWindow = RollingWindow[TradeBar](1)
@@ -253,64 +262,67 @@ class QCEquityTradeModel(EquityTradeModel):
             
 class StocksTrading:
     def __init__(self):
-        self.__equities = {}
+        self.equities = {}
     
     # return True if the equity was added correctly.
     def AddEquity(self, equity_symbol, equity):
         if equity_symbol is self.__equitie:
             return False
-        self.__equities[equity_symbol] = EquityTradeModel(equity_symbol, equity)
+        self.equities[equity_symbol] = EquityTradeModel(equity_symbol, equity)
         return True
 
     # Return True if the equity was removed correctly.
     def RemoveEquity(self, equity_symbol):
-        del self.__equities[equity_symbol]
+        del self.equities[equity_symbol]
 
     # Return True if the indicator was registered for the equity
     def RegisterIndicatorForEquity(self, equity_symbol, indicator_name, indicator):
-        if equity_symbol is self.__equities:
-            return self.__equities[equity_symbol].RegisterIndicator(indicator_name, indicator)
+        if equity_symbol is self.equities:
+            return self.equities[equity_symbol].RegisterIndicator(indicator_name, indicator)
         return False
 
     # Return True if the indicator was unregistered from the equity
     def UnRegisterIndicatorForEquity(self, equity_symbol, indicator_name):
-        if equity_symbol is self.__equities:
-            return self.__equities[equity_symbol].UnRegisterIndicator(indicator_name)
+        if equity_symbol is self.equities:
+            return self.equities[equity_symbol].UnRegisterIndicator(indicator_name)
         return False
 
     # Return the list of symbols that currently are being trading
     def GetEquitiesTradingSymbols(self):
-        return self.__equities.keys()
+        return self.equities.keys()
 
     def GetTradingEquities(self):
-        return self.__equities.values()
+        return self.equities.values()
 
     # Return amount of trading.
     def TotalStocksBeingTrading(self):
-        return len(self.__equities)
+        return len(self.equities)
 
     def IsEquityBeingTrading(self, symbol):
-        return  symbol is self.__equities
+        return  symbol is self.equities
 
     # Return EquityTradeModel of the parameter 'symbol'
     def GetEquity(self, symbol):
         if self.IsEquityBeingTrading(symbol):
-            return self.__equities[symbol]
+            return self.equities[symbol]
         return None
 
 class QCStocksTrading(StocksTrading):
     def __init__(self, qcAlgorithm):
-        super().__init__()
+        StocksTrading.__init__(self)
         self.__qcAlgorithm = qcAlgorithm
     
-    def AddEquity(self, equity_symbol, equity):
-        if equity_symbol is self.__equitie:
+    def AddEquity(self, equity):
+        if not self.GetEquity(equity.Symbol) is None:
             return False
+
         equity.SetDataNormalizationMode(DataNormalizationMode.Raw)
 
-        qc_equity_model = self.__equities[equity_symbol] = QCEquityTradeModel(equity_symbol, equity)
+        qc_equity_model = self.equities[equity.Symbol] = QCEquityTradeModel(equity)
         qc_equity_model.LastTradeTime = self.__qcAlgorithm.Time
 
-    def RegisterIndicatorForEquity(self, indicator):
-        super().AddIndicatorForEquity(indicator.Name, indicator)
+    def RegisterIndicatorForEquity(self, equity_symbol, indicator):
+        StocksTrading.RegisterIndicatorForEquity(self, equity_symbol, indicator.Name, indicator)
 
+    def RegisterIndicatorForEquity(self, equity_symbol, indicator_name, indicator):
+        StocksTrading.RegisterIndicatorForEquity(self, equity_symbol, indicator_name, indicator)
