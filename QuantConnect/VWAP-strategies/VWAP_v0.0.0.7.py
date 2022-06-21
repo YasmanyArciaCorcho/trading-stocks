@@ -15,14 +15,17 @@ class VWAP(QCAlgorithm):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
         self.SetEndDate(2021, 1, 31)    # Set End Date.
-        self.SetCash(100000)            # Set Strategy Cash.
+        self.SetCash(1000000)            # Set Strategy Cash.
 
         self.stocksTrading = QCStocksTrading(self)
-        
+
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equity1 = self.AddEquity("spy", Resolution.Second)
-        self.stocksTrading.AddEquity(equity1)
+        equities_symbols = ["aapl", "spy"]
+
+        for symbol in equities_symbols:
+            equity = self.AddEquity(symbol, Resolution.Second)
+            self.stocksTrading.AddEquity(equity)
 
         # Region - Set Broker configurations
         self.SetBrokerageModel(BrokerageName.InteractiveBrokersBrokerage, AccountType.Margin)
@@ -40,11 +43,11 @@ class VWAP(QCAlgorithm):
         self.LiquidateState = LiquidateState.Normal
 
         ## Sub region - Schedule events
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equity1.Symbol, 5), self.ResetDataAfterMarketOpenHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 5), self.ResetDataAfterMarketOpenHandler)
         self.endTimeToTradeBeforeMarketClose = 0
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose), self.BeforeMarketCloseHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equity1.Symbol, self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose), self.BeforeMarketCloseHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
         
         # Risk management
         self.RiskPerTrade = 200
@@ -77,7 +80,7 @@ class VWAP(QCAlgorithm):
             self.UpdateLastBrokenCandle(trading_equity)
 
             # Liquidate by time
-            if (self.ShouldLiquidateToWin(equity_current_price) 
+            if (self.ShouldLiquidateToWin(trading_equity, equity_current_price) 
                 or self.ShouldForceLiquidate()):
                 self.Liquidate(symbol)
                 return
@@ -88,15 +91,19 @@ class VWAP(QCAlgorithm):
             if (not self.Portfolio[symbol].Invested 
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
-                    trading_equity.LastEntryLowPrice = self.LowPriceWindow[0].Low
-                    count_actions_to_buy = int(self.RiskPerTrade/(trading_equity.LastEntryPrice - trading_equity.LastEntryLowPrice))
+                    trading_equity.LastEntryExitOnLostPrice = trading_equity.LowPriceWindow[0].Low
+                    trading_equity.LastEntryExitOnWinPrice = 2 * trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
+                    denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
+                    if denominator == 0:
+                        return
+                    count_actions_to_buy = int(self.RiskPerTrade / denominator)
                     self.MarketOrder(symbol, count_actions_to_buy)
-                    trading_equity.ResetEquityLastTradeTime(self)
+                    trading_equity.SetLastTradeTime(self.Time)
             elif self.Portfolio[symbol].Invested:
-                if (trading_equity.LastEntryLowPrice > equity_current_price or
-                (trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryLowPrice)) < equity_current_price):
+                if (trading_equity.LastEntryExitOnLostPrice > equity_current_price or
+                    trading_equity.LastEntryExitOnWinPrice <= equity_current_price):
                     self.Liquidate(symbol)
-                    trading_equity.ResetEquityLastTradeTime(self)
+                    trading_equity.SetLastTradeTime(self.Time)
 
     # Eval when we shouldn't make a trade. This block specify when to trade or not to trade.
     def ShouldIgnoreOnDataEvent(self, trading_equity, data):
@@ -151,10 +158,10 @@ class VWAP(QCAlgorithm):
             equity.LowPriceWindow.Add(bar)
     # EndRegion
 
-    def ShouldLiquidateToWin(self, equity_current_price):
+    def ShouldLiquidateToWin(self, trading_equity, equity_current_price):
         if (self.LiquidateState is LiquidateState.ToWin
-            and self.Portfolio.Invested
-            and self.LastEntryPrice <= equity_current_price):
+            and self.Portfolio[trading_equity.Symbol()].Invested
+            and trading_equity.LastEntryPrice <= equity_current_price):
             return True
         return False
 
@@ -168,28 +175,28 @@ class VWAP(QCAlgorithm):
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
     def ShouldEnterToBuy(self, trading_equity, equity_current_price):
-        return (not trading_equity.LastBrokenCandle is None
-            and self.IsPositiveBrokenCandle(trading_equity)
-            and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
-            and equity_current_price > self.CurrentTradingWindow[0].High) 
-   
-    def IsPositiveBrokenCandle(self, trading_equity):
-        candle = trading_equity.CurrentTradingWindow[0]
         vwap = trading_equity.GetIndicator('vwap')
+        return (not trading_equity.LastBrokenCandle is None
+                and self.IsPositiveBrokenCandle(vwap, trading_equity)
+                and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
+                and equity_current_price > trading_equity.CurrentTradingWindow[0].High) 
+   
+    def IsPositiveBrokenCandle(self, vwap, trading_equity):
+        candle = trading_equity.CurrentTradingWindow[0]
         return (not vwap is None 
-            and (candle.High > vwap.Current.Value
-            and candle.Low < vwap.Current.Value         
+            and (candle.Low < vwap.Current.Value         
             and candle.Close >= vwap.Current.Value))
     
     def UpdateLastBrokenCandle(self, trading_equity):
         current_trading_window = trading_equity.CurrentTradingWindow[0]
         vwap = trading_equity.GetIndicator('vwap')
-        if (not vwap is None
-            and not trading_equity.LastBrokenCandle is None 
+        if vwap is None:
+            return
+        if (not trading_equity.LastBrokenCandle is None 
             and current_trading_window.Low < vwap.Current.Value):
             trading_equity.LastBrokenCandle = None
         if (trading_equity.LastBrokenCandle is None
-            and self.IsPositiveBrokenCandle(trading_equity)):
+            and self.IsPositiveBrokenCandle(vwap, trading_equity)):
             trading_equity.LastBrokenCandle = current_trading_window
 
     def CalculateMarketGapPercent(self, last_close_day_price, current_day_open_price):
@@ -206,7 +213,8 @@ class EquityTradeModel:
         self.indicators = {}
 
         self.LastEntryPrice = None
-        self.LastEntryLowPrice = None
+        self.LastEntryExitOnLostPrice = None
+        self.LastEntryExitOnWinPrice = None
         self.LastDayClosePrice = None
 
         self.LastTradeTime = None
@@ -245,7 +253,7 @@ class EquityTradeModel:
         self.SetLastTradeTime(None)
 
     def GetIndicator(self, indicator_name):
-        if indicator_name is self.indicators:
+        if indicator_name in self.indicators:
             return self.indicators[indicator_name]
         return None
        
@@ -277,13 +285,13 @@ class StocksTrading:
 
     # Return True if the indicator was registered for the equity
     def RegisterIndicatorForEquity(self, equity_symbol, indicator_name, indicator):
-        if equity_symbol is self.equities:
+        if equity_symbol in self.equities:
             return self.equities[equity_symbol].RegisterIndicator(indicator_name, indicator)
         return False
 
     # Return True if the indicator was unregistered from the equity
     def UnRegisterIndicatorForEquity(self, equity_symbol, indicator_name):
-        if equity_symbol is self.equities:
+        if equity_symbol in self.equities:
             return self.equities[equity_symbol].UnRegisterIndicator(indicator_name)
         return False
 
