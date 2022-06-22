@@ -9,12 +9,12 @@ class LiquidateState(enum.Enum):
     ToWin = 2  # It is mandatory to liquidate if there is a win or there is not a loss. Equity current price >= entry price.
     Force = 3  # Liquidate the equity now.
 
-class VWAP(QCAlgorithm):
+class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 31)    # Set End Date.
+        self.SetEndDate(2021, 1, 10)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
         self.stocksTrading = QCStocksTrading(self)
@@ -149,13 +149,16 @@ class VWAP(QCAlgorithm):
     # EndRegion
 
     # Region Consolidates, update rolling windows
-    def MinuteConsolidateHandler(self, bar):
-        for equity in self.stocksTrading.GetTradingEquities():
-            equity.CurrentTradingWindow.Add(bar)
+    def MinuteConsolidateHandler(self, trade_bar):
+        equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
+        self.Log(trade_bar.Symbol)
+        if not equity is None:
+            equity.CurrentTradingWindow.Add(trade_bar)
 
-    def LowConsolidateHandler(self, bar):
-        for equity in self.stocksTrading.GetTradingEquities():
-            equity.LowPriceWindow.Add(bar)
+    def LowConsolidateHandler(self, trade_bar):
+        equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
+        if not equity is None:
+            equity.LowPriceWindow.Add(trade_bar)
     # EndRegion
 
     def ShouldLiquidateToWin(self, trading_equity, equity_current_price):
@@ -180,7 +183,7 @@ class VWAP(QCAlgorithm):
                 and self.IsPositiveBrokenCandle(vwap, trading_equity)
                 and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
                 and equity_current_price > trading_equity.CurrentTradingWindow[0].High) 
-   
+
     def IsPositiveBrokenCandle(self, vwap, trading_equity):
         candle = trading_equity.CurrentTradingWindow[0]
         return (not vwap is None 
@@ -307,7 +310,7 @@ class StocksTrading:
         return len(self.equities)
 
     def IsEquityBeingTrading(self, symbol):
-        return  symbol is self.equities
+        return symbol in self.equities
 
     # Return EquityTradeModel of the parameter 'symbol'
     def GetEquity(self, symbol):
