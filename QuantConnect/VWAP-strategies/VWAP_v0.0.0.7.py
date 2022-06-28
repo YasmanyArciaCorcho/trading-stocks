@@ -14,10 +14,12 @@ class VWAPStrategy(QCAlgorithm):
     def Initialize(self):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2022, 1, 10)    # Set End Date.
+        self.SetEndDate(2021, 2, 10)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
-        self.stocksTrading = QCStocksTrading(self)
+        # The second parameter indicate the number of allowed daily trades per equity
+        # By default if the second parameter is not defined there is not limited on the allowed daily trades
+        self.stocksTrading = QCStocksTrading(self, 1)
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
@@ -68,13 +70,11 @@ class VWAPStrategy(QCAlgorithm):
             if not data.Bars.ContainsKey(symbol):
                 return
 
-            if not self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol):
-                return
-
             equity_current_price = data.Bars[symbol].Price
 
             if self.CurrentTradingDay != self.Time.day:
                 self.UpdateOpenPriceAfterMarketOpenHandler(trading_equity, equity_current_price)
+                self.stocksTrading.ResetDailyTradeRegister()
                 self.CurrentTradingDay = self.Time.day
 
             if self.ShouldIgnoreOnDataEvent(trading_equity, data):
@@ -91,7 +91,8 @@ class VWAPStrategy(QCAlgorithm):
             if not self.LiquidateState is LiquidateState.Normal:
                 return
 
-            if (not self.Portfolio[symbol].Invested 
+            if (not self.Portfolio[symbol].Invested
+                and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryExitOnLostPrice = trading_equity.LowPriceWindow[0].Low
@@ -335,11 +336,15 @@ class StocksTrading:
             return True
         if not symbol in self.registeredOrders:
             return True
-        return self.registeredOrders[symbol] < self.maxAllowedTradePerDay
+        return self.registeredOrders[symbol] <= self.maxAllowedTradePerDay
+    
+    def ResetDailyTradeRegister(self):
+        self.registeredOrders = {}
+
 
 class QCStocksTrading(StocksTrading):
-    def __init__(self, qcAlgorithm):
-        StocksTrading.__init__(self)
+    def __init__(self, qcAlgorithm, max_allowed_trade_per_day = -1):
+        StocksTrading.__init__(self, max_allowed_trade_per_day)
         self.__qcAlgorithm = qcAlgorithm
     
     def AddEquity(self, equity):
