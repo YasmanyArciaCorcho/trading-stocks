@@ -95,7 +95,7 @@ class VWAPStrategy(QCAlgorithm):
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryExitOnLostPrice = trading_equity.LowPriceWindow[0].Low
-                    trading_equity.LastEntryExitOnWinPrice = 2 * trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
+                    trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice - (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 1
                     denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
                     if denominator == 0:
                         return
