@@ -14,14 +14,14 @@ class VWAPStrategy(QCAlgorithm):
     def Initialize(self):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 10)    # Set End Date.
+        self.SetEndDate(2022, 1, 10)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
         self.stocksTrading = QCStocksTrading(self)
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["aapl", "spy"]
+        equities_symbols = ["aapl", "spy", "nflx"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -68,6 +68,9 @@ class VWAPStrategy(QCAlgorithm):
             if not data.Bars.ContainsKey(symbol):
                 return
 
+            if not self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol):
+                return
+
             equity_current_price = data.Bars[symbol].Price
 
             if self.CurrentTradingDay != self.Time.day:
@@ -99,6 +102,7 @@ class VWAPStrategy(QCAlgorithm):
                     count_actions_to_buy = int(self.RiskPerTrade / denominator)
                     self.MarketOrder(symbol, count_actions_to_buy)
                     trading_equity.SetLastTradeTime(self.Time)
+                    self.stocksTrading.RegisterBuyOrder(symbol)
             elif self.Portfolio[symbol].Invested:
                 if (trading_equity.LastEntryExitOnLostPrice > equity_current_price or
                     trading_equity.LastEntryExitOnWinPrice <= equity_current_price):
@@ -272,8 +276,11 @@ class QCEquityTradeModel(EquityTradeModel):
             self.SetLastTradeTime(qc_algorithm.Time)
             
 class StocksTrading:
-    def __init__(self):
+    def __init__(self, max_allowed_trade_per_day = -1):
         self.equities = {}
+
+        self.maxAllowedTradePerDay = max_allowed_trade_per_day
+        self.registeredOrders = {}
     
     # return True if the equity was added correctly.
     def AddEquity(self, equity_symbol, equity):
@@ -317,6 +324,18 @@ class StocksTrading:
         if self.IsEquityBeingTrading(symbol):
             return self.equities[symbol]
         return None
+
+    def RegisterBuyOrder(self, symbol):
+        if not symbol in self.registeredOrders:
+            self.registeredOrders[symbol] = 1
+        self.registeredOrders[symbol] += 1
+
+    def IsAllowToBuyByTradesPerDayCapacity(self, symbol):
+        if self.maxAllowedTradePerDay == -1:
+            return True
+        if not symbol in self.registeredOrders:
+            return True
+        return self.registeredOrders[symbol] < self.maxAllowedTradePerDay
 
 class QCStocksTrading(StocksTrading):
     def __init__(self, qcAlgorithm):
