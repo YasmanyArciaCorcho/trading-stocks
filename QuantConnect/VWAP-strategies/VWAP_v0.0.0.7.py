@@ -156,7 +156,6 @@ class VWAPStrategy(QCAlgorithm):
     # Region Consolidates, update rolling windows
     def MinuteConsolidateHandler(self, trade_bar):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
-        self.Log(trade_bar.Symbol)
         if not equity is None:
             equity.CurrentTradingWindow.Add(trade_bar)
 
