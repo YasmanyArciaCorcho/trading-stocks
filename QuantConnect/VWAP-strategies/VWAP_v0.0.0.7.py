@@ -13,17 +13,17 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 2, 10)    # Set End Date.
+        self.SetStartDate(2022, 5, 17)   # Set Start Date.
+        self.SetEndDate(2022, 7, 20)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
-        self.stocksTrading = QCStocksTrading(self, 1)
+        self.stocksTrading = QCStocksTrading(self, -1)
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["aapl", "spy", "nflx"]
+        equities_symbols = ["spy"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -36,7 +36,7 @@ class VWAPStrategy(QCAlgorithm):
         # All the variables that manages times are written in seconds.
         self.ConsolidateSecondsTime = 60        # Define the one min candle.
         self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
-        self.AccumulatePositiveTimeRan = 0      # Interval time when all equity price should be over the vwap before entering in a buy trade.
+        self.AccumulatePositiveTimeRan = 60*10      # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
         self.IsAllowToTradeByTime = False
 
@@ -61,7 +61,7 @@ class VWAPStrategy(QCAlgorithm):
             # QuantConnect indicators has a field 'name' which returns the indicator name.
             self.stocksTrading.RegisterIndicatorForEquity(symbol, 'vwap', self.VWAP(symbol))     # Maybe we can test if it is a good fit for us. Example vwap.Name
 
-            self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.MinuteConsolidateHandler)
+            self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.CurrentTradingWindowConsolidateHandler)
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateLowPriceTime), self.LowConsolidateHandler)
 
     def OnData(self, data):
@@ -96,7 +96,7 @@ class VWAPStrategy(QCAlgorithm):
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryExitOnLostPrice = trading_equity.LowPriceWindow[0].Low
-                    trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice - (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 1
+                    trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 1
                     denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
                     if denominator == 0:
                         return
@@ -138,6 +138,7 @@ class VWAPStrategy(QCAlgorithm):
         self.LiquidateState = LiquidateState.Normal
         for equity in self.stocksTrading.GetTradingEquities():
             equity.CurrentTradingWindow = RollingWindow[TradeBar](2)
+            equity.LastBrokenCandle = None
     # EndRegion
 
     # Region - Before market close.
@@ -154,7 +155,7 @@ class VWAPStrategy(QCAlgorithm):
     # EndRegion
 
     # Region Consolidates, update rolling windows
-    def MinuteConsolidateHandler(self, trade_bar):
+    def CurrentTradingWindowConsolidateHandler(self, trade_bar):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
         if not equity is None:
             equity.CurrentTradingWindow.Add(trade_bar)
@@ -186,7 +187,7 @@ class VWAPStrategy(QCAlgorithm):
         return (not trading_equity.LastBrokenCandle is None
                 and self.IsPositiveBrokenCandle(vwap, trading_equity)
                 and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
-                and equity_current_price > trading_equity.CurrentTradingWindow[0].High) 
+                and equity_current_price > trading_equity.CurrentTradingWindow[0].High)
 
     def IsPositiveBrokenCandle(self, vwap, trading_equity):
         candle = trading_equity.CurrentTradingWindow[0]
@@ -200,8 +201,10 @@ class VWAPStrategy(QCAlgorithm):
         if vwap is None:
             return
         if (not trading_equity.LastBrokenCandle is None 
-            and current_trading_window.Low < vwap.Current.Value):
+            and current_trading_window.Low < vwap.Current.Value
+            and current_trading_window.Close < vwap.Current.Value):
             trading_equity.LastBrokenCandle = None
+            return
         if (trading_equity.LastBrokenCandle is None
             and self.IsPositiveBrokenCandle(vwap, trading_equity)):
             trading_equity.LastBrokenCandle = current_trading_window
