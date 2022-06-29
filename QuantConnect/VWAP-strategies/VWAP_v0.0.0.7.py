@@ -68,7 +68,7 @@ class VWAPStrategy(QCAlgorithm):
         for trading_equity in self.stocksTrading.GetTradingEquities():
             symbol = trading_equity.Symbol()
             if not data.Bars.ContainsKey(symbol):
-                return
+                continue
 
             equity_current_price = data.Bars[symbol].Price
 
@@ -84,12 +84,12 @@ class VWAPStrategy(QCAlgorithm):
 
             # Liquidate by time
             if (self.ShouldLiquidateToWin(trading_equity, equity_current_price) 
-                or self.ShouldForceLiquidate()):
+                or self.ShouldForceLiquidate(symbol)):
                 self.Liquidate(symbol)
-                return
+                continue
 
             if not self.LiquidateState is LiquidateState.Normal:
-                return
+                continue
 
             if (not self.Portfolio[symbol].Invested
                 and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
@@ -99,7 +99,7 @@ class VWAPStrategy(QCAlgorithm):
                     trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 1
                     denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
                     if denominator == 0:
-                        return
+                        continue
                     count_actions_to_buy = int(self.RiskPerTrade / denominator)
                     self.MarketOrder(symbol, count_actions_to_buy)
                     trading_equity.SetLastTradeTime(self.Time)
@@ -173,9 +173,9 @@ class VWAPStrategy(QCAlgorithm):
             return True
         return False
 
-    def ShouldForceLiquidate(self):
+    def ShouldForceLiquidate(self, symbol):
         if (self.LiquidateState is LiquidateState.Force
-            and self.Portfolio.Invested):
+            and self.Portfolio[symbol].Invested):
             return True
         return False
 
