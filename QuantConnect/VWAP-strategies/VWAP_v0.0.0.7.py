@@ -13,8 +13,8 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2022, 5, 17)   # Set Start Date.
-        self.SetEndDate(2022, 7, 20)    # Set End Date.
+        self.SetStartDate(2021, 1, 1)   # Set Start Date.
+        self.SetEndDate(2021, 1, 7)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
         # The second parameter indicate the number of allowed daily trades per equity
@@ -23,7 +23,7 @@ class VWAPStrategy(QCAlgorithm):
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["spy"]
+        equities_symbols = ["aapl", "spy", "tsla", "msft", "ba", "qqq", "fb", "pypl", "twtr", "nvda", "amd", "c", "baba", "bac", "gld", "tgt", "wmt", "amzn", "googl"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -78,7 +78,7 @@ class VWAPStrategy(QCAlgorithm):
                 self.CurrentTradingDay = self.Time.day
 
             if self.ShouldIgnoreOnDataEvent(trading_equity, data):
-                return
+                continue
 
             self.UpdateLastBrokenCandle(trading_equity)
 
@@ -96,7 +96,7 @@ class VWAPStrategy(QCAlgorithm):
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryExitOnLostPrice = min(trading_equity.LowPriceWindow[0].Low, trading_equity.CurrentTradingWindow[0].Low)
-                    trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 1
+                    trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 2
                     denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
                     if denominator == 0:
                         continue
@@ -138,6 +138,7 @@ class VWAPStrategy(QCAlgorithm):
         self.LiquidateState = LiquidateState.Normal
         for equity in self.stocksTrading.GetTradingEquities():
             equity.CurrentTradingWindow = RollingWindow[TradeBar](2)
+            equity.LowPriceWindow = RollingWindow[TradeBar](2)
             equity.LastBrokenCandle = None
     # EndRegion
 
