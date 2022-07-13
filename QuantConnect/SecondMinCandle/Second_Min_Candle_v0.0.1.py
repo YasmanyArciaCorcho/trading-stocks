@@ -69,6 +69,10 @@ class VWAPStrategy(QCAlgorithm):
 
             equity_current_price = data.Bars[symbol].Price
 
+            if self.CurrentTradingDay != self.Time.day:
+                self.stocksTrading.ResetDailyTradeRegister()
+                self.CurrentTradingDay = self.Time.day
+
             if self.ShouldIgnoreOnDataEvent(trading_equity, data):
                 continue
 
@@ -78,8 +82,15 @@ class VWAPStrategy(QCAlgorithm):
                 trading_equity.LastTicket.Cancel()
                 trading_equity.LastTicket = None
 
+            # Liquidate by time
+            if (self.ShouldLiquidateToWin(trading_equity, equity_current_price) 
+                or self.ShouldForceLiquidate(symbol)):
+                self.Liquidate(symbol)
+                continue
+
             if (#not self.Portfolio[symbol].Invested
                 not trading_equity.Invested
+                and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                     trading_equity.Invested = True
                     self.Log(str(trading_equity.Invested))
@@ -118,6 +129,10 @@ class VWAPStrategy(QCAlgorithm):
     # Region After Market Open
     def ResetDataAfterMarketOpenHandler(self):
         self.IsAllowToTradeByTime = True
+        self.LiquidateState = LiquidateState.Normal
+        for equity in self.stocksTrading.GetTradingEquities():
+            equity.CurrentTradingWindow = RollingWindow[TradeBar](1)
+            equity.LowPriceWindow = RollingWindow[TradeBar](1)
     # EndRegion
 
     # Region - Before market close.
