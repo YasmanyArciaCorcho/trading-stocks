@@ -72,8 +72,17 @@ class VWAPStrategy(QCAlgorithm):
             if self.ShouldIgnoreOnDataEvent(trading_equity, data):
                 continue
 
-            if (not self.Portfolio[symbol].Invested
+            if (not self.IsAllowToTradeByTime
+                and not trading_equity.LastTicket is None
+                and not trading_equity.LastTicket.Status == OrderStatus.Filled):
+                trading_equity.LastTicket.Cancel()
+                trading_equity.LastTicket = None
+
+            if (#not self.Portfolio[symbol].Invested
+                not trading_equity.Invested
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
+                    trading_equity.Invested = True
+                    self.Log(str(trading_equity.Invested))
                     trading_equity.LastEntryPrice = equity_current_price
                     trading_equity.LastEntryExitOnLostPrice = min(trading_equity.LowPriceWindow[0].Low, trading_equity.CurrentTradingWindow[0].Low)
                     trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice) * 2
@@ -81,12 +90,15 @@ class VWAPStrategy(QCAlgorithm):
                     if denominator == 0:
                         continue
                     count_actions_to_buy = int(self.RiskPerTrade / denominator)
-                    self.MarketOrder(symbol, count_actions_to_buy)
+                    #self.MarketOrder(symbol, count_actions_to_buy)
+                    trading_equity.LastTicket = self.LimitOrder(symbol, count_actions_to_buy, trading_equity.LastEntryPrice + 0.01)
                     trading_equity.SetLastTradeTime(self.Time)
                     self.stocksTrading.RegisterBuyOrder(symbol)
-            elif self.Portfolio[symbol].Invested:
+            # self.Portfolio[symbol].Invested:
+            elif trading_equity.Invested:
                 if (trading_equity.LastEntryExitOnLostPrice > equity_current_price or
                     trading_equity.LastEntryExitOnWinPrice <= equity_current_price):
+                    trading_equity.Invested = False
                     self.Liquidate(symbol)
                     trading_equity.SetLastTradeTime(self.Time)
 
@@ -202,6 +214,8 @@ class EquityTradeModel:
         self.LastBrokenCandle = None
         self.CurrentTradingWindow = None
         self.LowPriceWindow = None
+        self.LastTicket = None
+        self.Invested = False
 
     def Symbol(self):
         return self.__symbol
