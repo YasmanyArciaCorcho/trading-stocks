@@ -13,8 +13,8 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 1, 13)   # Set Start Date.
-        self.SetEndDate(2021, 1, 13)    # Set End Date.
+        self.SetStartDate(2021, 1, 5)   # Set Start Date.
+        self.SetEndDate(2021, 1, 8)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
 
         # The second parameter indicate the number of allowed daily trades per equity
@@ -48,6 +48,8 @@ class VWAPStrategy(QCAlgorithm):
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 0), self.ResetDataAfterMarketOpenHandler)
         self.endTimeToTradeBeforeMarketClose = 0
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.At(4, 00), self.PassSecondMinHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
         # Risk management
         self.RiskPerTrade = 200
 
