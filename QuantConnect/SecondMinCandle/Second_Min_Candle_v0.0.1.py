@@ -19,7 +19,7 @@ class VWAPStrategy(QCAlgorithm):
 
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
-        self.stocksTrading = QCStocksTrading(self, -1)
+        self.stocksTrading = QCStocksTrading(self, 1)
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
@@ -47,7 +47,7 @@ class VWAPStrategy(QCAlgorithm):
         ## Sub region - Schedule events
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 0), self.ResetDataAfterMarketOpenHandler)
         self.endTimeToTradeBeforeMarketClose = 0
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.At(9, 32), self.PassSecondMinHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.At(4, 00), self.PassSecondMinHandler)
         # Risk management
         self.RiskPerTrade = 200
 
@@ -131,6 +131,7 @@ class VWAPStrategy(QCAlgorithm):
         self.IsAllowToTradeByTime = True
         self.LiquidateState = LiquidateState.Normal
         for equity in self.stocksTrading.GetTradingEquities():
+            equity.FirstCandle = None
             equity.CurrentTradingWindow = RollingWindow[TradeBar](1)
             equity.LowPriceWindow = RollingWindow[TradeBar](1)
     # EndRegion
@@ -156,6 +157,8 @@ class VWAPStrategy(QCAlgorithm):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
         if not equity is None:
             equity.CurrentTradingWindow.Add(trade_bar)
+            if equity.FirstCandle is None:
+                equity.FirstCandle = trade_bar
 
     def LowConsolidateHandler(self, trade_bar):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
@@ -180,8 +183,8 @@ class VWAPStrategy(QCAlgorithm):
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
     def ShouldEnterToBuy(self, trading_equity, equity_current_price):
-        return (self.IsAllowToTradeByTime 
-                and equity_current_price > trading_equity.CurrentTradingWindow[0].High)
+        return (self.IsAllowToTradeByTime
+                and equity_current_price > trading_equity.FirstCandle.High)
 
     def IsPositiveBrokenCandle(self, vwap, trading_equity):
         candle = trading_equity.CurrentTradingWindow[0]
@@ -270,6 +273,7 @@ class QCEquityTradeModel(EquityTradeModel):
         self.LastBrokenCandle = None
         self.CurrentTradingWindow = RollingWindow[TradeBar](1)
         self.LowPriceWindow = RollingWindow[TradeBar](1)
+        self.FirstCandle = None
 
         def ResetEquityLastTradeTime(self, qc_algorithm):
             self.SetLastTradeTime(qc_algorithm.Time)
