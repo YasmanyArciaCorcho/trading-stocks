@@ -38,6 +38,12 @@ class VWAPStrategy(QCAlgorithm):
         self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
         self.AccumulatePositiveTimeRan = 60*10      # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
+        # Define time between trades with the same equity.
+        # example if we buy we can sell or buy again after 60 seconds if
+        # TimeBetweenTrades is 60.
+        self.TimeBetweenTrades = 60
+        
+        # if IsAllowToTradeByTime we can do trades.
         self.IsAllowToTradeByTime = False
 
         self.CurrentTradingDay = -1
@@ -122,7 +128,7 @@ class VWAPStrategy(QCAlgorithm):
             not trading_equity.CurrentTradingWindow.IsReady or
             not trading_equity.LowPriceWindow.IsReady):
             return True
-        if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.ConsolidateSecondsTime:
+        if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenTrades:
             return True
         return False
 
