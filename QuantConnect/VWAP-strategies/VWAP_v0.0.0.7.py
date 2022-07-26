@@ -52,10 +52,16 @@ class VWAPStrategy(QCAlgorithm):
 
         ## Sub region - Schedule events
         ### AfterMarketOpen and BeforeMarketClose (x, time) is based on mins.
+        # Reset initial configurations to do the daily trades.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 5), self.ResetDataAfterMarketOpenHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.BeforeMarketCloseHandler)
+        # Just sell trades are allowed after BeforeMarketCloseTryToLiquidateOnWinStateHandler runs
+        # On liquidate.Win the algo will try to exit just on winning trades.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        # Just sell trades are allowed after BeforeMarketCloseLiquidateOnDayStateHandler runs
+        # All opened trades will be liquidate on liquidate force state.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
+        # Any trade is allowed after BeforeMarketCloseHandler runs.
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.BeforeMarketCloseHandler)
         
         # Risk management
         self.RiskPerTrade = 200
@@ -185,7 +191,7 @@ class VWAPStrategy(QCAlgorithm):
 
     def  IsLiquidateTime(self):
         return self.LiquidateState is LiquidateState.Normal
-        
+
     # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
