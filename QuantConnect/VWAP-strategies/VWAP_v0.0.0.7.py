@@ -94,9 +94,6 @@ class VWAPStrategy(QCAlgorithm):
                 self.Liquidate(symbol)
                 continue
 
-            if not self.LiquidateState is LiquidateState.Normal:
-                continue
-
             if (not self.Portfolio[symbol].Invested
                 and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
@@ -186,12 +183,16 @@ class VWAPStrategy(QCAlgorithm):
             return True
         return False
 
+    def  IsLiquidateTime(self):
+        return self.LiquidateState is LiquidateState.Normal
+        
     # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
     def ShouldEnterToBuy(self, trading_equity, equity_current_price):
         vwap = trading_equity.GetIndicator('vwap')
-        return (not trading_equity.LastBrokenCandle is None
+        return (not self.IsLiquidateTime()
+                and not trading_equity.LastBrokenCandle is None
                 and self.IsPositiveBrokenCandle(vwap, trading_equity)
                 and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
                 and equity_current_price > trading_equity.CurrentTradingWindow[0].High)
