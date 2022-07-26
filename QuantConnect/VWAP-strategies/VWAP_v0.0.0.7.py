@@ -51,11 +51,11 @@ class VWAPStrategy(QCAlgorithm):
         self.LiquidateState = LiquidateState.Normal
 
         ## Sub region - Schedule events
+        ### AfterMarketOpen and BeforeMarketClose (x, time) is based on mins.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 5), self.ResetDataAfterMarketOpenHandler)
-        self.endTimeToTradeBeforeMarketClose = 0
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose), self.BeforeMarketCloseHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], self.endTimeToTradeBeforeMarketClose + 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.BeforeMarketCloseHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
         
         # Risk management
         self.RiskPerTrade = 200
