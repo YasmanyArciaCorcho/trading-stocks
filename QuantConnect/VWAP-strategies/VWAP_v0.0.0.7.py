@@ -43,6 +43,7 @@ class VWAPStrategy(QCAlgorithm):
         # TimeBetweenTrades is 60.
         self.TimeBetweenTrades = 60
         
+        self.IsBuyAllowed = True
         # if IsAllowToTradeByTime we can do trades.
         self.IsAllowToTradeByTime = False
 
@@ -54,12 +55,14 @@ class VWAPStrategy(QCAlgorithm):
         ### AfterMarketOpen and BeforeMarketClose (x, time) is based on mins.
         # Reset initial configurations to do the daily trades.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 5), self.ResetDataAfterMarketOpenHandler)
-        # Just sell trades are allowed after BeforeMarketCloseTryToLiquidateOnWinStateHandler runs
+        # after SetDisallowedOnBuyHandler runs just sell trades are allowed
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.SetDisallowedOnBuyHandler)
+        # Just sell trades are allowed after SetLiquidateOnWinStateHandler runs
         # On liquidate.Win the algo will try to exit just on winning trades.
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.BeforeMarketCloseTryToLiquidateOnWinStateHandler)
-        # Just sell trades are allowed after BeforeMarketCloseLiquidateOnDayStateHandler runs
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.SetLiquidateOnWinStateHandler)
+        # Just sell trades are allowed after SetLiquidateOnForceStateHandler runs
         # All opened trades will be liquidate on liquidate force state.
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 5), self.BeforeMarketCloseLiquidateOnDayStateHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 5), self.SetLiquidateOnForceStateHandler)
         # Any trade is allowed after BeforeMarketCloseHandler runs.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.BeforeMarketCloseHandler)
         
@@ -143,6 +146,7 @@ class VWAPStrategy(QCAlgorithm):
 
     # Region After Market Open
     def ResetDataAfterMarketOpenHandler(self):
+        self.IsBuyAllowed = True
         self.IsAllowToTradeByTime = True
         self.LiquidateState = LiquidateState.Normal
         for equity in self.stocksTrading.GetTradingEquities():
@@ -151,16 +155,21 @@ class VWAPStrategy(QCAlgorithm):
             equity.LastBrokenCandle = None
     # EndRegion
 
+
+    def SetDisallowedOnBuyHandler(self):
+        self.IsBuyAllowed = False
+
     # Region - Before market close.
     def BeforeMarketCloseHandler(self):
+        self.IsBuyAllowed = False
         self.IsAllowToTradeByTime = False
         for equity in self.stocksTrading.GetTradingEquities():
             equity.LastDayClosePrice = self.Securities[equity.Symbol()].Price
 
-    def BeforeMarketCloseTryToLiquidateOnWinStateHandler(self):
+    def SetLiquidateOnWinStateHandler(self):
         self.LiquidateState = LiquidateState.ToWin
 
-    def BeforeMarketCloseLiquidateOnDayStateHandler(self):
+    def SetLiquidateOnForceStateHandler(self):
         self.LiquidateState = LiquidateState.Force
     # EndRegion
 
@@ -189,15 +198,15 @@ class VWAPStrategy(QCAlgorithm):
             return True
         return False
 
-    def  IsLiquidateTime(self):
-        return self.LiquidateState is LiquidateState.Normal
+    def  IsOnBuyAllowedState(self):
+        return self.IsBuyAllowed
 
     # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
     #     and its Low price is lower than VWAP current value and the same time
     # 2 - The equity current price is greater than the previous candle high value.
     def ShouldEnterToBuy(self, trading_equity, equity_current_price):
         vwap = trading_equity.GetIndicator('vwap')
-        return (not self.IsLiquidateTime()
+        return (self.IsOnBuyAllowedState()
                 and not trading_equity.LastBrokenCandle is None
                 and self.IsPositiveBrokenCandle(vwap, trading_equity)
                 and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= self.AccumulatePositiveTimeRan
