@@ -150,8 +150,8 @@ class VWAPStrategy(QCAlgorithm):
         self.IsAllowToTradeByTime = True
         self.LiquidateState = LiquidateState.Normal
         for equity in self.stocksTrading.GetTradingEquities():
-            equity.CurrentTradingWindow = RollingWindow[TradeBar](2)
-            equity.LowPriceWindow = RollingWindow[TradeBar](2)
+            equity.CurrentTradingWindow = RollingWindow[TradeBar](1)
+            equity.LowPriceWindow = RollingWindow[TradeBar](1)
             equity.LastBrokenCandle = None
     # EndRegion
 
@@ -295,7 +295,7 @@ class QCEquityTradeModel(EquityTradeModel):
         EquityTradeModel.__init__(self, equity.Symbol, equity)
         
         self.LastBrokenCandle = None
-        self.CurrentTradingWindow = RollingWindow[TradeBar](2)
+        self.CurrentTradingWindow = RollingWindow[TradeBar](1)
         self.LowPriceWindow = RollingWindow[TradeBar](1)
 
         def ResetEquityLastTradeTime(self, qc_algorithm):
