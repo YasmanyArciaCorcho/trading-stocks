@@ -127,7 +127,7 @@ class VWAPStrategy(QCAlgorithm):
                ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnWinPrice, trading_equity.LastEntryExitOnWinPrice)
                trading_equity.LastSellOnWinOrderId = ticket.OrderId
                self.Log(str(trading_equity.LastSellOnWinOrderId))
-               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnLostPrice, trading_equity.LastEntryExitOnWinPrice)
+               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnLostPrice, trading_equity.LastEntryExitOnLostPrice)
                trading_equity.LastSellOnLoseOrderId = ticket.OrderId
                self.Log(str(trading_equity.LastSellOnLoseOrderId))
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
