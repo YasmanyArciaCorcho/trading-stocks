@@ -23,7 +23,7 @@ class VWAPStrategy(QCAlgorithm):
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["aapl", "spy", "tsla", "msft", "ba", "qqq", "fb", "pypl", "twtr", "nvda", "amd", "c", "baba", "bac", "gld", "tgt", "wmt", "amzn", "googl"]
+        equities_symbols = ["spy"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -103,46 +103,53 @@ class VWAPStrategy(QCAlgorithm):
                 self.Liquidate(symbol)
                 continue
 
+            self.TryToUpdateStopOrderPrice(trading_equity, equity_current_price)
+
             if (not self.Portfolio[symbol].Invested
                 and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
                 and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
                 self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
-                denominator = trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice
-                if denominator == 0:
+                if trading_equity.StopOrderUpdatePriceByRish == 0:
                     continue
-                count_actions_to_buy = int(self.RiskPerTrade / denominator)
+                count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
                 ticket = self.MarketOrder(symbol, count_actions_to_buy)
                 trading_equity.LastBuyOrderId = ticket.OrderId
-    
+
+    def ResetEquityTradePrice(self, trading_equity):
+        trading_equity.LastEntryPrice = None
+        trading_equity.LastStopEntryPrice = None
+        trading_equity.StopOrderUpdatePriceByRish = None
+        trading_equity.LastSellOrderId = None
+
+    def TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price):
+        if trading_equity.LastSellOrderId is None:
+            return
+        ticket = self.Transactions.GetOrderTicket(trading_equity.LastSellOrderId)
+        current_stop_price = trading_equity.LastEntryPrice + trading_equity.StopOrderUpdatePriceByRish
+        if current_stop_price - equity_current_price < 0.05:
+            current_stop_price = current_stop_price + trading_equity.StopOrderUpdatePriceByRish/2
+            ticket.UpdateStopPrice(current_stop_price)
+            ticket.UpdateLimitPrice(current_stop_price  - 0.05)
+        
     def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
         if (orderEvent.Status == OrderStatus.Filled):
             trading_equity = self.stocksTrading.GetEquity(orderEvent.Symbol)
             if (not trading_equity is None
-                and trading_equity.LastSellOnLoseOrderId is None):
+                and trading_equity.LastSellOrderId is None):
                self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
-               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnWinPrice, trading_equity.LastEntryExitOnWinPrice + 0.05)
-               trading_equity.LastSellOnWinOrderId = ticket.OrderId
-               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnLostPrice, trading_equity.LastEntryExitOnLostPrice - 0.05)
-               trading_equity.LastSellOnLoseOrderId = ticket.OrderId
+               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.05)
+               trading_equity.LastSellOrderId = ticket.OrderId
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
                trading_equity.LastBuyOrderId = None
-            elif(not trading_equity.LastSellOnWinOrderId is None
-                and trading_equity.LastSellOnWinOrderId == orderEvent.OrderId):
-                self.Transactions.CancelOrder(trading_equity.LastSellOnLoseOrderId)
-                trading_equity.LastSellOnWinOrderId = None
-                trading_equity.LastSellOnLoseOrderId = None
-                trading_equity.SetLastTradeTime(self.Time)
-            elif(not trading_equity.LastSellOnLoseOrderId is None
-                and trading_equity.LastSellOnLoseOrderId == orderEvent.OrderId):
-                self.Transactions.CancelOrder(trading_equity.LastSellOnWinOrderId)
-                trading_equity.LastSellOnLoseOrderId = None
-                trading_equity.LastSellOnWinOrderId = None
+            elif(not trading_equity.LastSellOrderId is None
+                and trading_equity.LastSellOrderId == orderEvent.OrderId):
+                self.ResetEquityTradePrice(trading_equity)
             trading_equity.SetLastTradeTime(self.Time)
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
-        trading_equity.LastEntryExitOnLostPrice = min(trading_equity.LowPriceWindow[0].Low, trading_equity.CurrentTradingWindow[0].Low)
-        trading_equity.LastEntryExitOnWinPrice = trading_equity.LastEntryPrice + (trading_equity.LastEntryPrice - trading_equity.LastEntryExitOnLostPrice)
+        trading_equity.LastStopEntryPrice = min(trading_equity.LowPriceWindow[0].Low, trading_equity.CurrentTradingWindow[0].Low)
+        trading_equity.StopOrderUpdatePriceByRish = trading_equity.LastEntryPrice - trading_equity.LastStopEntryPrice
                              
     # Eval when we shouldn't make a trade. This block specify when to trade or not to trade.
     def ShouldIgnoreOnDataEvent(self, trading_equity, data):
@@ -186,8 +193,7 @@ class VWAPStrategy(QCAlgorithm):
         self.IsAllowToTradeByTime = False
         for equity in self.stocksTrading.GetTradingEquities():
             equity.LastDayClosePrice = self.Securities[equity.Symbol()].Price
-            equity.LastSellOnWinOrderId = None
-            equity.LastSellOnLoseOrderId = None
+            self.ResetEquityTradePrice(equity)
         openOrders = self.Transactions.GetOpenOrders()
         if len(openOrders)> 0:
             for order in openOrders:
@@ -273,13 +279,12 @@ class EquityTradeModel:
         self.indicators = {}
 
         self.LastEntryPrice = None
-        self.LastEntryExitOnLostPrice = None
-        self.LastEntryExitOnWinPrice = None
+        self.LastStopEntryPrice = None
+        self.StopOrderUpdatePriceByRish = None
         self.LastDayClosePrice = None
 
         self.LastBuyOrderId = None
-        self.LastSellOnWinOrderId = None
-        self.LastSellOnLoseOrderId = None
+        self.LastSellOrderId = None
 
         self.LastTradeTime = None
 
