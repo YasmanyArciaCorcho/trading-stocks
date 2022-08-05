@@ -36,7 +36,7 @@ class VWAPStrategy(QCAlgorithm):
         # All the variables that manages times are written in seconds.
         self.ConsolidateSecondsTime = 60        # Define the one min candle.
         self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
-        self.AccumulatePositiveTimeRan = 60*10      # Interval time when all equity price should be over the vwap before entering in a buy trade.
+        self.AccumulatePositiveTimeRan = 60      # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
         # Define time between trades with the same equity.
         # example if we buy we can sell or buy again after 60 seconds if
