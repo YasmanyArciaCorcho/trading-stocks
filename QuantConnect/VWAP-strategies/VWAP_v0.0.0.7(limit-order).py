@@ -36,7 +36,7 @@ class VWAPStrategy(QCAlgorithm):
         # All the variables that manages times are written in seconds.
         self.ConsolidateSecondsTime = 60        # Define the one min candle.
         self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
-        self.AccumulatePositiveTimeRan = 60      # Interval time when all equity price should be over the vwap before entering in a buy trade.
+        self.AccumulatePositiveTimeRan = 60     # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
         # Define time between trades with the same equity.
         # example if we buy we can sell or buy again after 60 seconds if
@@ -125,11 +125,12 @@ class VWAPStrategy(QCAlgorithm):
         if trading_equity.LastSellOrderId is None:
             return
         ticket = self.Transactions.GetOrderTicket(trading_equity.LastSellOrderId)
-        current_stop_price = trading_equity.LastEntryPrice + trading_equity.StopOrderUpdatePriceByRish
-        if current_stop_price - equity_current_price < 0.1:
-            current_stop_price = current_stop_price + trading_equity.StopOrderUpdatePriceByRish/2
+        current_stop_price = trading_equity.LastStopEntryPrice
+        if current_stop_price - equity_current_price < 0.05:
+            current_stop_price = current_stop_price + trading_equity.StopOrderUpdatePriceByRish + trading_equity.StopOrderUpdatePriceByRish/2
+            self.Log('u'+str(current_stop_price))
             ticket.UpdateStopPrice(current_stop_price)
-            ticket.UpdateLimitPrice(current_stop_price  - 0.1)
+            ticket.UpdateLimitPrice(current_stop_price  - 0.05)
         
     def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
         if (orderEvent.Status == OrderStatus.Filled):
@@ -137,7 +138,7 @@ class VWAPStrategy(QCAlgorithm):
             if (not trading_equity is None
                 and trading_equity.LastSellOrderId is None):
                self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
-               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.1)
+               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.5)
                trading_equity.LastSellOrderId = ticket.OrderId
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
                trading_equity.LastBuyOrderId = None
@@ -221,6 +222,7 @@ class VWAPStrategy(QCAlgorithm):
     def ShouldLiquidateToWin(self, trading_equity, equity_current_price):
         if (self.LiquidateState is LiquidateState.ToWin
             and self.Portfolio[trading_equity.Symbol()].Invested
+            and not trading_equity.LastEntryPrice is None 
             and trading_equity.LastEntryPrice <= equity_current_price):
             return True
         return False
