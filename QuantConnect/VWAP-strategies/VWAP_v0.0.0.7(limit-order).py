@@ -23,7 +23,7 @@ class VWAPStrategy(QCAlgorithm):
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["spy"]
+        equities_symbols = ["aapl", "spy", "tsla", "msft", "ba", "qqq", "fb", "pypl", "twtr", "nvda", "amd", "c", "baba", "bac", "gld", "tgt", "wmt", "amzn", "googl"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -126,10 +126,10 @@ class VWAPStrategy(QCAlgorithm):
             return
         ticket = self.Transactions.GetOrderTicket(trading_equity.LastSellOrderId)
         current_stop_price = trading_equity.LastEntryPrice + trading_equity.StopOrderUpdatePriceByRish
-        if current_stop_price - equity_current_price < 0.05:
+        if current_stop_price - equity_current_price < 0.1:
             current_stop_price = current_stop_price + trading_equity.StopOrderUpdatePriceByRish/2
             ticket.UpdateStopPrice(current_stop_price)
-            ticket.UpdateLimitPrice(current_stop_price  - 0.05)
+            ticket.UpdateLimitPrice(current_stop_price  - 0.1)
         
     def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
         if (orderEvent.Status == OrderStatus.Filled):
@@ -137,7 +137,7 @@ class VWAPStrategy(QCAlgorithm):
             if (not trading_equity is None
                 and trading_equity.LastSellOrderId is None):
                self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
-               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.05)
+               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.1)
                trading_equity.LastSellOrderId = ticket.OrderId
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
                trading_equity.LastBuyOrderId = None
