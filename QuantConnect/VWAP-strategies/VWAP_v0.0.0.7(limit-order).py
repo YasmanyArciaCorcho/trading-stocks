@@ -124,13 +124,16 @@ class VWAPStrategy(QCAlgorithm):
     def TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price):
         if trading_equity.LastSellOrderId is None:
             return
-        ticket = self.Transactions.GetOrderTicket(trading_equity.LastSellOrderId)
-        current_stop_price = trading_equity.LastStopEntryPrice
-        if current_stop_price - equity_current_price < 0.05:
-            current_stop_price = current_stop_price + trading_equity.StopOrderUpdatePriceByRish + trading_equity.StopOrderUpdatePriceByRish/2
-            self.Log('u'+str(current_stop_price))
-            ticket.UpdateStopPrice(current_stop_price)
-            ticket.UpdateLimitPrice(current_stop_price  - 0.05)
+        if equity_current_price - trading_equity.LastEntryPrice > trading_equity.StopOrderUpdatePriceByRish:
+            current_stop_price = trading_equity.LastEntryPrice + trading_equity.StopOrderUpdatePriceByRish/2
+            trading_equity.LastEntryPrice = trading_equity.LastEntryPrice + trading_equity.StopOrderUpdatePriceByRish
+            update_settings = UpdateOrderFields()
+            update_settings.StopPrice = current_stop_price
+            update_settings.LimitPrice = current_stop_price  - 0.05
+            ticket = self.Transactions.GetOrderTicket(trading_equity.LastSellOrderId)
+            response = ticket.Update(update_settings)
+            if not response.IsSuccess:
+                self.Debug("x")
         
     def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
         if (orderEvent.Status == OrderStatus.Filled):
