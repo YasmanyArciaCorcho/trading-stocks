@@ -117,19 +117,13 @@ class VWAPStrategy(QCAlgorithm):
     def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
         if (orderEvent.Status == OrderStatus.Filled):
             trading_equity = self.stocksTrading.GetEquity(orderEvent.Symbol)
-            self.Log("a")
-            self.Log(trading_equity.LastBuyOrderId)
-            self.Log(orderEvent.OrderId)
             if (not trading_equity is None
                 and trading_equity.LastSellOnLoseOrderId is None):
                self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
-               self.Log("b")
                ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnWinPrice, trading_equity.LastEntryExitOnWinPrice + 0.05)
                trading_equity.LastSellOnWinOrderId = ticket.OrderId
-               self.Log(str(trading_equity.LastSellOnWinOrderId))
                ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastEntryExitOnLostPrice, trading_equity.LastEntryExitOnLostPrice - 0.05)
                trading_equity.LastSellOnLoseOrderId = ticket.OrderId
-               self.Log(str(trading_equity.LastSellOnLoseOrderId))
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
                trading_equity.LastBuyOrderId = None
             elif(not trading_equity.LastSellOnWinOrderId is None
