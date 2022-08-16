@@ -128,14 +128,14 @@ class VWAPStrategy(QCAlgorithm):
                trading_equity.LastBuyOrderId = None
             elif(not trading_equity.LastSellOnWinOrderId is None
                 and trading_equity.LastSellOnWinOrderId == orderEvent.OrderId):
-                trading_equity.LastSellOnWinOrderId = None
                 self.Transactions.CancelOrder(trading_equity.LastSellOnLoseOrderId)
+                trading_equity.LastSellOnWinOrderId = None
                 trading_equity.LastSellOnLoseOrderId = None
                 trading_equity.SetLastTradeTime(self.Time)
             elif(not trading_equity.LastSellOnLoseOrderId is None
                 and trading_equity.LastSellOnLoseOrderId == orderEvent.OrderId):
-                trading_equity.LastSellOnLoseOrderId = None
                 self.Transactions.CancelOrder(trading_equity.LastSellOnWinOrderId)
+                trading_equity.LastSellOnLoseOrderId = None
                 trading_equity.LastSellOnWinOrderId = None
             trading_equity.SetLastTradeTime(self.Time)
 
@@ -186,6 +186,8 @@ class VWAPStrategy(QCAlgorithm):
         self.IsAllowToTradeByTime = False
         for equity in self.stocksTrading.GetTradingEquities():
             equity.LastDayClosePrice = self.Securities[equity.Symbol()].Price
+            equity.LastSellOnWinOrderId = None
+            equity.LastSellOnLoseOrderId = None
         openOrders = self.Transactions.GetOpenOrders()
         if len(openOrders)> 0:
             for order in openOrders:
