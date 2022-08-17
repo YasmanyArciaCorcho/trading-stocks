@@ -14,7 +14,7 @@ class VWAPStrategy(QCAlgorithm):
     def Initialize(self):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 1)    # Set End Date.
+        self.SetEndDate(2021, 1, 20)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
@@ -35,7 +35,7 @@ class VWAPStrategy(QCAlgorithm):
         # All the variables that manages times are written in seconds.
         self.ConsolidateSecondsTime = 60        # Define the one min candle.
         self.ConsolidateLowPriceTime = 60 * 5   # Define low price candle, used on vwap strategy.
-        self.AccumulatePositiveTimeRan = 60     # Interval time when all equity price should be over the vwap before entering in a buy trade.
+        self.AccumulatePositiveTimeRan = 0     # Interval time when all equity price should be over the vwap before entering in a buy trade.
         
         # Define time between trades with the same equity.
         # example if we buy we can sell or buy again after 60 seconds if
@@ -140,7 +140,7 @@ class VWAPStrategy(QCAlgorithm):
             if (not trading_equity is None
                 and trading_equity.LastSellOrderId is None):
                self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
-               ticket = self.StopLimitOrder(orderEvent.Symbol, orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice + 0.5)
+               ticket = self.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice + 0.5)
                trading_equity.LastSellOrderId = ticket.OrderId
                self.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
                trading_equity.LastBuyOrderId = None
