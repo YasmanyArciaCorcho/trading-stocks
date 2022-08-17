@@ -14,9 +14,8 @@ class VWAPStrategy(QCAlgorithm):
     def Initialize(self):
         #Region - Initialize cash flow
         self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 7)    # Set End Date.
+        self.SetEndDate(2021, 1, 1)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
-
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
         self.stocksTrading = QCStocksTrading(self, -1)
@@ -152,7 +151,7 @@ class VWAPStrategy(QCAlgorithm):
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
-        trading_equity.LastStopEntryPrice = max(trading_equity.LowPriceWindow[0].Hight, trading_equity.CurrentTradingWindow[0].Hight)
+        trading_equity.LastStopEntryPrice = max(trading_equity.LowPriceWindow[0].High, trading_equity.CurrentTradingWindow[0].High)
         trading_equity.StopOrderUpdatePriceByRish = trading_equity.LastEntryPrice - trading_equity.LastStopEntryPrice
                              
     # Eval when we shouldn't make a trade. This block specify when to trade or not to trade.
@@ -253,7 +252,7 @@ class VWAPStrategy(QCAlgorithm):
     def IsPositiveBrokenCandle(self, vwap, trading_equity):
         candle = trading_equity.CurrentTradingWindow[0]
         return (not vwap is None 
-            and (candle.Low > vwap.Current.Value         
+            and (candle.High > vwap.Current.Value         
             and candle.Close <= vwap.Current.Value))
     
     def UpdateLastBrokenCandle(self, trading_equity):
@@ -262,7 +261,7 @@ class VWAPStrategy(QCAlgorithm):
         if vwap is None:
             return
         if (not trading_equity.LastBrokenCandle is None 
-            and current_trading_window.Low > vwap.Current.Value
+            and current_trading_window.High > vwap.Current.Value
             and current_trading_window.Close > vwap.Current.Value):
             trading_equity.LastBrokenCandle = None
             return
