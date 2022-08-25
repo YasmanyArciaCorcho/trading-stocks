@@ -55,7 +55,7 @@ class VWAPStrategy(QCAlgorithm):
         # Reset initial configurations to do the daily trades.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.AfterMarketOpen(equities_symbols[0], 5), self.ResetDataAfterMarketOpenHandler)
         # after SetDisallowedOnBuyHandler runs just sell trades are allowed
-        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 0), self.SetDisallowedOnBuyHandler)
+        self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.SetDisallowedOnBuyHandler)
         # Just sell trades are allowed after SetLiquidateOnWinStateHandler runs
         # On liquidate.Win the algo will try to exit just on winning trades.
         self.Schedule.On(self.DateRules.EveryDay(), self.TimeRules.BeforeMarketClose(equities_symbols[0], 10), self.SetLiquidateOnWinStateHandler)
@@ -78,8 +78,10 @@ class VWAPStrategy(QCAlgorithm):
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.CurrentTradingWindowConsolidateHandler)
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateLowPriceTime), self.LowConsolidateHandler)
         
+        self.Strategies = [BuyVWAPStrategyAction(), SellVWAPStrategyAction()]
+        self.StrategiesEntriesId = {}
         # self.Strategy = BuyVWAPStrategyAction()
-        self.Strategy = SellVWAPStrategyAction()
+        # self.Strategy = SellVWAPStrategyAction()
 
     def OnData(self, data):
         for trading_equity in self.stocksTrading.GetTradingEquities():
@@ -97,25 +99,31 @@ class VWAPStrategy(QCAlgorithm):
             if self.ShouldIgnoreOnDataEvent(trading_equity, data):
                 continue
 
-            self.UpdateLastBrokenCandle(trading_equity)
-
             # Liquidate by time
             if (self.ShouldLiquidateToWin(trading_equity, equity_current_price) 
                 or self.ShouldForceLiquidate(symbol)):
                 self.Liquidate(symbol)
                 continue
 
-            self.TryToUpdateStopOrderPrice(trading_equity, equity_current_price)
+            if not self.IsOnTradeAllowedState():
+               continue
+
+            self.UpdateLastBrokenCandle(trading_equity)
+           
+            # self.TryToUpdateStopOrderPrice(trading_equity, equity_current_price)
 
             if (not self.Portfolio[symbol].Invested
-                and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)
-                and self.ShouldEnterToBuy(trading_equity, equity_current_price)):
-                self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
-                if trading_equity.StopOrderUpdatePriceByRish == 0:
-                    continue
-                count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
-                ticket = self.Strategy.PerformOrder(self, symbol, count_actions_to_buy)
-                trading_equity.LasEntryOrderId = ticket.OrderId
+                and self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)):
+                for strategy in self.Strategies:
+                    if strategy.ShouldEnterToBuy(self, trading_equity, equity_current_price): 
+                        strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
+                        if trading_equity.StopOrderUpdatePriceByRish == 0:
+                            continue
+                        count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
+                        ticket = strategy.PerformOrder(self, symbol, count_actions_to_buy)
+                        trading_equity.LasEntryOrderId = ticket.OrderId
+                        self.StrategiesEntriesId[trading_equity.LasEntryOrderId] = strategy
+                        break
 
     def ResetEquityTradePrice(self, trading_equity):
         trading_equity.LastEntryPrice = None
@@ -211,26 +219,21 @@ class VWAPStrategy(QCAlgorithm):
         return (current_day_open_price - last_close_day_price) / current_day_open_price * 100
 
     def TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price):
-        self.Strategy.TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price)
+        for strategy in self.Strategies:
+            strategy.TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price)
         
-    def OnOrderEvent(self, orderEvent: OrderEvent) -> None:
-        self.Strategy.OnOrderEvent(self, orderEvent)
-
-    def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
-        self.Strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
-
-    # 1 - Enter to buy when the previous candle High price is greater than VWAP current value  
-    #     and its Low price is lower than VWAP current value and the same time
-    # 2 - The equity current price is greater than the previous candle high value.
-    def ShouldEnterToBuy(self, trading_equity, equity_current_price):
-        return self.Strategy.ShouldEnterToBuy(self, trading_equity, equity_current_price)
+    def OnOrderEvent(self, orderEvent):
+        if orderEvent.OrderId in self.StrategiesEntriesId:
+            self.StrategiesEntriesId[orderEvent.OrderId].OnOrderEvent(self, orderEvent)
+            self.StrategiesEntriesId.pop(orderEvent.OrderId)
 
     def UpdateLastBrokenCandle(self, trading_equity):
-        self.Strategy.UpdateLastBrokenCandle(trading_equity)
+        for strategy in self.Strategies:
+            strategy.UpdateLastBrokenCandle(trading_equity)
 
 class VWAPStrategyAction:
-    def __init__(self) -> None:
-        self.IsActive = False
+    def __init__(self):
+        self.LastBrokenCandlers = {}
 
     def IsGoodBrokenCandle(self, vwap, trading_equity):
         pass
@@ -253,6 +256,14 @@ class VWAPStrategyAction:
     def OnOrderEvent(self, vwap_algo, orderEvent):
         pass
 
+    def GetLastBrokenCandle(self, symbol):
+        if symbol in self.LastBrokenCandlers:
+            return self.LastBrokenCandlers[symbol]
+        return None
+
+    def UpdateLastBrokenCandleData(self, symbol, candle):
+        self.LastBrokenCandlers[symbol] = candle
+
 class BuyVWAPStrategyAction(VWAPStrategyAction):
     def IsGoodBrokenCandle(self, vwap, trading_equity):
         candle = trading_equity.CurrentTradingWindow[0]
@@ -265,14 +276,14 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
         vwap = trading_equity.GetIndicator('vwap')
         if vwap is None:
             return
-        if (not trading_equity.LastBrokenCandle is None 
+        if (not self.GetLastBrokenCandle(trading_equity.Symbol()) is None 
             and current_trading_window.Low < vwap.Current.Value
             and current_trading_window.Close < vwap.Current.Value):
-            trading_equity.LastBrokenCandle = None
+            self.UpdateLastBrokenCandleData(trading_equity.Symbol(), None)
             return
-        if (trading_equity.LastBrokenCandle is None
+        if (self.GetLastBrokenCandle(trading_equity.Symbol()) is None
             and self.IsGoodBrokenCandle(vwap, trading_equity)):
-            trading_equity.LastBrokenCandle = current_trading_window
+            self.UpdateLastBrokenCandleData(trading_equity.Symbol(), current_trading_window)
 
     def TryToUpdateStopOrderPrice(self, vwap_algo, trading_equity, equity_current_price):
         if trading_equity.LastExitOrderId is None:
@@ -288,10 +299,9 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
         
     def ShouldEnterToBuy(self, vwap_algo, trading_equity, equity_current_price):
         vwap = trading_equity.GetIndicator('vwap')
-        return (vwap_algo.IsOnTradeAllowedState()
-                and not trading_equity.LastBrokenCandle is None
+        return (not self.GetLastBrokenCandle(trading_equity.Symbol()) is None
                 and self.IsGoodBrokenCandle(vwap, trading_equity)
-                and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= vwap_algo.AccumulatePositiveTimeRan
+                and (trading_equity.CurrentTradingWindow[0].Time - self.GetLastBrokenCandle(trading_equity.Symbol()).Time).total_seconds() >= vwap_algo.AccumulatePositiveTimeRan
                 and equity_current_price > trading_equity.CurrentTradingWindow[0].High)
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
@@ -307,7 +317,7 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
             trading_equity = vwap_algo.stocksTrading.GetEquity(orderEvent.Symbol)
             if (not trading_equity is None
                 and trading_equity.LastExitOrderId is None):
-               vwap_algo.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
+               self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
                ticket = vwap_algo.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.5)
                trading_equity.LastExitOrderId = ticket.OrderId
                vwap_algo.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
@@ -316,7 +326,6 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
                 and trading_equity.LastExitOrderId == orderEvent.OrderId):
                 vwap_algo.ResetEquityTradePrice(trading_equity)
             trading_equity.SetLastTradeTime(vwap_algo.Time)
-
 
 class SellVWAPStrategyAction(VWAPStrategyAction):
     def IsGoodBrokenCandle(self, vwap, trading_equity):
@@ -330,14 +339,14 @@ class SellVWAPStrategyAction(VWAPStrategyAction):
         vwap = trading_equity.GetIndicator('vwap')
         if vwap is None:
             return
-        if (not trading_equity.LastBrokenCandle is None 
+        if (not self.GetLastBrokenCandle(trading_equity.Symbol()) is None 
             and current_trading_window.High > vwap.Current.Value
             and current_trading_window.Close > vwap.Current.Value):
-            trading_equity.LastBrokenCandle = None
+            self.UpdateLastBrokenCandleData(trading_equity.Symbol(), None)
             return
-        if (trading_equity.LastBrokenCandle is None
+        if (self.GetLastBrokenCandle(trading_equity.Symbol()) is None
             and self.IsGoodBrokenCandle(vwap, trading_equity)):
-            trading_equity.LastBrokenCandle = current_trading_window
+            self.UpdateLastBrokenCandleData(trading_equity.Symbol(), current_trading_window)
 
     def TryToUpdateStopOrderPrice(self, vwap_algo, trading_equity, equity_current_price):
         if trading_equity.LastExitOrderId is None:
@@ -353,10 +362,9 @@ class SellVWAPStrategyAction(VWAPStrategyAction):
         
     def ShouldEnterToBuy(self, vwap_algo, trading_equity, equity_current_price):
         vwap = trading_equity.GetIndicator('vwap')
-        return (vwap_algo.IsOnTradeAllowedState()
-                and not trading_equity.LastBrokenCandle is None
+        return (not self.GetLastBrokenCandle(trading_equity.Symbol()) is None
                 and self.IsGoodBrokenCandle(vwap, trading_equity)
-                and (trading_equity.CurrentTradingWindow[0].Time - trading_equity.LastBrokenCandle.Time).total_seconds() >= vwap_algo.AccumulatePositiveTimeRan
+                and (trading_equity.CurrentTradingWindow[0].Time - self.GetLastBrokenCandle(trading_equity.Symbol()).Time).total_seconds() >= vwap_algo.AccumulatePositiveTimeRan
                 and equity_current_price < trading_equity.CurrentTradingWindow[0].Low)
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
@@ -372,7 +380,7 @@ class SellVWAPStrategyAction(VWAPStrategyAction):
             trading_equity = vwap_algo.stocksTrading.GetEquity(orderEvent.Symbol)
             if (not trading_equity is None
                 and trading_equity.LastExitOrderId is None):
-               vwap_algo.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
+               self.SetTradingEquityBuyPriceData(trading_equity, orderEvent.FillPrice)
                ticket = vwap_algo.StopLimitOrder(orderEvent.Symbol, -orderEvent.Quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice + 0.5)
                trading_equity.LastExitOrderId = ticket.OrderId
                vwap_algo.stocksTrading.RegisterBuyOrder(orderEvent.Symbol)
