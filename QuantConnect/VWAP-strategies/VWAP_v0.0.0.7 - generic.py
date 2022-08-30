@@ -78,7 +78,7 @@ class VWAPStrategy(QCAlgorithm):
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.CurrentTradingWindowConsolidateHandler)
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateLowPriceTime), self.LowConsolidateHandler)
         
-        self.Strategies = [SellVWAPStrategyAction()]
+        self.Strategies = [BuyVWAPStrategyAction(), SellVWAPStrategyAction()]
         self.StrategiesEntriesId = {}
         # self.Strategy = BuyVWAPStrategyAction()
         # self.Strategy = SellVWAPStrategyAction()
