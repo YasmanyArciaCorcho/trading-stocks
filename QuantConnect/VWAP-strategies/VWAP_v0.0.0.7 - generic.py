@@ -102,7 +102,7 @@ class VWAPStrategy(QCAlgorithm):
             # Liquidate by time
             if (self.ShouldLiquidateToWin(trading_equity, equity_current_price) 
                 or self.ShouldForceLiquidate(symbol)):
-                self.Liquidate(symbol)
+                self.LiquidateCurrentEquityTrade(symbol)
                 continue
 
             if not self.IsOnTradeAllowedState():
@@ -114,7 +114,8 @@ class VWAPStrategy(QCAlgorithm):
 
             if (self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)):
                 for strategy in self.Strategies:
-                    if strategy.IsOnTrade:
+                    if (symbol in self.StrategiesEntriesId.keys()
+                        and self.StrategiesEntriesId[symbol] == strategy):
                         continue
                     if strategy.ShouldEnterToBuy(self, trading_equity, equity_current_price):
                         strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
@@ -122,8 +123,7 @@ class VWAPStrategy(QCAlgorithm):
                             continue
                         # Liquidate if the equity is being traded.
                         if (symbol in self.StrategiesEntriesId.keys()
-                            and not self.StrategiesEntriesId[symbol] is None
-                            and self.StrategiesEntriesId[symbol].IsOnTrade):
+                            and not self.StrategiesEntriesId[symbol] is None):
                             self.LiquidateCurrentEquityTrade(symbol)
 
                         count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
@@ -132,13 +132,10 @@ class VWAPStrategy(QCAlgorithm):
                         self.stocksTrading.RegisterEntryOrder(symbol)
                         trading_equity.LasEntryOrderId = ticket.OrderId
                         strategy.AddStopLose(self, trading_equity, count_actions_to_buy, equity_current_price)
-                        strategy.IsOnTrade = True
                         break
     
     def LiquidateCurrentEquityTrade(self, equity_symbol):
         self.Liquidate(equity_symbol)
-        self.StrategiesEntriesId[equity_symbol].IsOnTrade = False
-        self.StrategiesEntriesId[equity_symbol] = None
 
     def ResetEquityTradePrice(self, trading_equity):
         trading_equity.LastEntryPrice = None
@@ -237,12 +234,15 @@ class VWAPStrategy(QCAlgorithm):
         for strategy in self.Strategies:
             strategy.TryToUpdateStopOrderPrice(self, trading_equity, equity_current_price)
         
-    # def OnOrderEvent(self, orderEvent):
-    #     self.Log(orderEvent.Symbol)
-    #     self.Log(self.StrategiesEntriesId)
-    #     if orderEvent.Symbol in self.StrategiesEntriesId:
-    #         self.StrategiesEntriesId[orderEvent.Symbol].OnOrderEvent(self, orderEvent)
-    #         self.StrategiesEntriesId.pop(orderEvent.Symbol)
+    def OnOrderEvent(self, orderEvent):
+     if (orderEvent.Status == OrderStatus.Filled
+         or orderEvent.Status == OrderStatus.Canceled):
+            trading_equity = self.stocksTrading.GetEquity(orderEvent.Symbol)
+            if (not trading_equity is None
+                and not trading_equity.LastExitOrder is None
+                and trading_equity.LastExitOrder.OrderId == orderEvent.OrderId):
+                trading_equity.LastExitOrder = None
+                self.StrategiesEntriesId[orderEvent.Symbol] = None
 
     def UpdateLastBrokenCandle(self, trading_equity):
         for strategy in self.Strategies:
@@ -251,7 +251,6 @@ class VWAPStrategy(QCAlgorithm):
 class VWAPStrategyAction:
     def __init__(self):
         self.LastBrokenCandlers = {}
-        self.IsOnTrade = False
 
     def IsGoodBrokenCandle(self, vwap, trading_equity):
         pass
