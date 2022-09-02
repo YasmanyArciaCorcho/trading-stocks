@@ -170,6 +170,7 @@ class VWAPStrategy(QCAlgorithm):
         self.IsTradeAllowed = True
         self.IsAllowToTradeByTime = True
         self.LiquidateState = LiquidateState.Normal
+        self.StrategiesEntriesId = {}
         for equity in self.stocksTrading.GetTradingEquities():
             equity.CurrentTradingWindow = RollingWindow[TradeBar](1)
             equity.LowPriceWindow = RollingWindow[TradeBar](1)
