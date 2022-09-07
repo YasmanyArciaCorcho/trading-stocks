@@ -132,6 +132,7 @@ class VWAPStrategy(QCAlgorithm):
                         self.stocksTrading.RegisterEntryOrder(symbol)
                         trading_equity.LasEntryOrderId = ticket.OrderId
                         strategy.AddStopLose(self, trading_equity, count_actions_to_buy, equity_current_price)
+                        trading_equity.SetLastTradeTime(self.Time)
                         break
     
     def LiquidateCurrentEquityTrade(self, equity_symbol):
