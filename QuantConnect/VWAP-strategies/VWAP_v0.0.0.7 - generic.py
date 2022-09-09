@@ -284,7 +284,8 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
         if vwap is None:
             return
         return (equity_current_price > vwap.Current.Value
-                and vwap.Current.Value > last_candle.High)
+                and equity_current_price > last_candle.High
+                and last_candle.Low < vwap.Current.Value)
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
@@ -331,7 +332,8 @@ class SellVWAPStrategyAction(VWAPStrategyAction):
         if vwap is None:
             return
         return (equity_current_price < vwap.Current.Value
-                and vwap.Current.Value < last_candle.Low)
+                and equity_current_price < last_candle.Low
+                and last_candle.High > vwap.Current.Value)
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
