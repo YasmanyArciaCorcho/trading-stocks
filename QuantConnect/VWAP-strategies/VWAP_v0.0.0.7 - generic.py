@@ -253,7 +253,7 @@ class VWAPStrategyAction:
     def TryToUpdateStopOrderPrice(self, vwap_algo, trading_equity, equity_current_price):
         pass
 
-    def ShouldEnterToBuy(self, vwap_algo, trading_equity, equity_current_price):
+    def ShouldEnterToBuy(self, vwap, trading_equity, equity_current_price):
         pass
 
     def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
