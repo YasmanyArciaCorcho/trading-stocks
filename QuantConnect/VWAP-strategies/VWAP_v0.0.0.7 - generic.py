@@ -118,7 +118,7 @@ class VWAPStrategy(QCAlgorithm):
                     vwap = trading_equity.GetIndicator('vwap')
                     if vwap is None:
                         return
-                    if strategy.ShouldEnterToBuy(self, vwap, trading_equity, equity_current_price):
+                    if strategy.ShouldEnterToBuy(vwap, trading_equity, equity_current_price):
                         strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
                         if trading_equity.StopOrderUpdatePriceByRish == 0:
                             continue
@@ -311,7 +311,7 @@ class BuyVWAPStrategyAction(VWAPStrategyAction):
 
     def AddStopLose(self, vwap_algo, vwap, trading_equity, quantity, equity_current_price):
         self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
-        vwap_algo.StopLimitOrder(trading_equity.Symbol(), -quantity, vwap, vwap - 0.5)
+        vwap_algo.StopLimitOrder(trading_equity.Symbol(), -quantity, vwap.Current.Value, vwap.Current.Value - 0.5)
         trading_equity.LastExitOrder = vwap_algo.StopLimitOrder(trading_equity.Symbol(), -quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.5)
 
 class SellVWAPStrategyAction(VWAPStrategyAction):
@@ -357,7 +357,7 @@ class SellVWAPStrategyAction(VWAPStrategyAction):
 
     def AddStopLose(self, vwap_algo, vwap, trading_equity, quantity, equity_current_price):
         self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
-        vwap_algo.StopLimitOrder(trading_equity.Symbol(), quantity, vwap, vwap + 0.5)
+        vwap_algo.StopLimitOrder(trading_equity.Symbol(), quantity, vwap.Current.Value, vwap.Current.Value + 0.5)
         trading_equity.LastExitOrder = vwap_algo.StopLimitOrder(trading_equity.Symbol(), quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice + 0.5)
 
 # So far, all prices are based in USD dollar for any field. 
