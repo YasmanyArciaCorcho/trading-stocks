@@ -250,6 +250,8 @@ class VWAPStrategy(QCAlgorithm):
                 and trading_equity.LastExitOrder.OrderId == orderEvent.OrderId):
                 trading_equity.LastExitOrder = None
                 self.StrategiesEntriesId[orderEvent.Symbol] = None
+                if orderEvent.Status == OrderStatus.Filled:
+                    trading_equity.SetLastTradeTime(self.Time)
 
 class VWAPStrategyAction:
     def __init__(self):
