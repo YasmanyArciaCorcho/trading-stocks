@@ -25,16 +25,16 @@ class TargerPriceStrategy(QCAlgorithm):
         ## One equity should be traded at least.
         equities_symbols = ["qqq"]
         equities_prices = []
-        day1 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day2 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day3 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day4 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day5 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day6 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day7 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day8 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day9 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
-        day10 = [DailyEquityPrice("qqq"), 309, 300,350,330, DailyEquityPrice("fb"), 200, 180]
+        day1 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day2 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day3 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day4 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day5 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day6 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day7 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day8 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day9 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        day10 = [DailyEquityPrice("qqq"), 309, 300,350,330]
 
         equities_prices.append(day1)
         equities_prices.append(day2)
