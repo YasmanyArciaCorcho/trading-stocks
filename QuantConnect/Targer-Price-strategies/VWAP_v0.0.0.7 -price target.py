@@ -14,8 +14,8 @@ class TargerPriceStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 20)    # Set End Date.
+        self.SetStartDate(2021, 1, 4)   # Set Start Date.
+        self.SetEndDate(2021, 1, 6)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
@@ -24,28 +24,28 @@ class TargerPriceStrategy(QCAlgorithm):
         # Region - Initialize trading equities
         ## One equity should be traded at least.
         equities_symbols = ["qqq"]
-        equities_prices = []
-        day1 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day2 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day3 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day4 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day5 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day6 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day7 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day8 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day9 = [DailyEquityPrice("qqq"), 309, 300,350,330]
-        day10 = [DailyEquityPrice("qqq"), 309, 300,350,330]
+        self.equities_prices = []
+        day1 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day2 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day3 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day4 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day5 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day6 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day7 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day8 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day9 = [DailyEquityPrice("qqq", 309, 300,350,330)]
+        day10 = [DailyEquityPrice("qqq", 309, 300,350,330)]
 
-        equities_prices.append(day1)
-        equities_prices.append(day2)
-        equities_prices.append(day3)
-        equities_prices.append(day4)
-        equities_prices.append(day5)
-        equities_prices.append(day6)
-        equities_prices.append(day7)
-        equities_prices.append(day8)
-        equities_prices.append(day9)
-        equities_prices.append(day10)
+        self.equities_prices.append(day1)
+        self.equities_prices.append(day2)
+        self.equities_prices.append(day3)
+        self.equities_prices.append(day4)
+        self.equities_prices.append(day5)
+        self.equities_prices.append(day6)
+        self.equities_prices.append(day7)
+        self.equities_prices.append(day8)
+        self.equities_prices.append(day9)
+        self.equities_prices.append(day10)
 
         self.CurrentDay = 0
 
@@ -145,7 +145,7 @@ class TargerPriceStrategy(QCAlgorithm):
 
                 if (allow_to_trade
                     and strategy.ShouldEnterToBuy(self, trading_equity.Symbol(), equity_current_price)):
-                    strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
+                    strategy.SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price)
                     if trading_equity.StopOrderUpdatePriceByRish == 0:
                         continue
                     count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
@@ -164,7 +164,7 @@ class TargerPriceStrategy(QCAlgorithm):
                 return equity_price
         return None
 
-    def LiquidateCurrentEquityTrade(self, equity_symbol):
+    def LT4nugoGMykWR1yxePXsdUVNKbuinFn6Dj(self, equity_symbol):
         self.Liquidate(equity_symbol)
 
     def ResetEquityTradePrice(self, trading_equity):
@@ -284,7 +284,7 @@ class TargetPriceStrategyAction:
     def ShouldEnterToBuy(self, algo, trading_equity, equity_current_price):
         pass
 
-    def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
+    def SetTradingEquityBuyPriceData(self, algo, trading_equity, equity_current_price):
         pass
 
     def PerformOrder(self, algo, symbol, quantity):
@@ -315,9 +315,10 @@ class BuyTargetPriceStrategyAction(TargetPriceStrategyAction):
             return equity_current_price >= equity_price_data.BuyEntryPriceLow and equity_current_price <= equity_price_data.BuyEntryPriceHigh
         return False
 
-    def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
+    def SetTradingEquityBuyPriceData(self, algo, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
-        trading_equity.LastStopEntryPrice = min(trading_equity.LowPriceWindow[0].Low, trading_equity.CurrentTradingWindow[0].Low)
+        equity_daily_price = algo.GetCurrentEquityPrice(trading_equity.Symbol())
+        trading_equity.LastStopEntryPrice = equity_daily_price.BuyEntryPriceLow 
         trading_equity.StopOrderUpdatePriceByRish = abs(trading_equity.LastEntryPrice - trading_equity.LastStopEntryPrice)
     
     def PerformOrder(self, algo, symbol, quantity):
@@ -338,7 +339,7 @@ class BuyTargetPriceStrategyAction(TargetPriceStrategyAction):
     #         trading_equity.SetLastTradeTime(algo.Time)
 
     def AddStopLose(self, algo, trading_equity, quantity, equity_current_price):
-        self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
+        self.SetTradingEquityBuyPriceData(algo, trading_equity, equity_current_price)
         trading_equity.LastExitOrder = algo.StopLimitOrder(trading_equity.Symbol(), -quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice - 0.5)
 
 class SellTargetPriceStrategyAction(TargetPriceStrategyAction):
@@ -360,9 +361,10 @@ class SellTargetPriceStrategyAction(TargetPriceStrategyAction):
             return equity_current_price >= equity_price_data.SellEntryPriceLow and equity_current_price <= equity_price_data.SellEntryPriceHigh
         return False
 
-    def SetTradingEquityBuyPriceData(self, trading_equity, equity_current_price):
+    def SetTradingEquityBuyPriceData(self, algo, trading_equity, equity_current_price):
         trading_equity.LastEntryPrice = equity_current_price
-        trading_equity.LastStopEntryPrice = max(trading_equity.LowPriceWindow[0].High, trading_equity.CurrentTradingWindow[0].High)
+        equity_daily_price = algo.GetCurrentEquityPrice(trading_equity.Symbol())
+        trading_equity.LastStopEntryPrice =  equity_daily_price.SellEntryPriceHigh
         trading_equity.StopOrderUpdatePriceByRish = abs(trading_equity.LastEntryPrice - trading_equity.LastStopEntryPrice)
     
     def PerformOrder(self, algo, symbol, quantity):
@@ -383,7 +385,7 @@ class SellTargetPriceStrategyAction(TargetPriceStrategyAction):
     #         trading_equity.SetLastTradeTime(algo.Time)
 
     def AddStopLose(self, algo, trading_equity, quantity, equity_current_price):
-        self.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
+        self.SetTradingEquityBuyPriceData(algo, trading_equity, equity_current_price)
         trading_equity.LastExitOrder = algo.StopLimitOrder(trading_equity.Symbol(), quantity, trading_equity.LastStopEntryPrice, trading_equity.LastStopEntryPrice + 0.5)
 
 # So far, all prices are based in USD dollar for any field. 
