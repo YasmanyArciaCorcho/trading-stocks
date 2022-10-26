@@ -13,8 +13,8 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 1, 1)   # Set Start Date.
-        self.SetEndDate(2021, 1, 20)    # Set End Date.
+        self.SetStartDate(2021, 10, 15)   # Set Start Date.
+        self.SetEndDate(2021, 10, 24)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
@@ -22,7 +22,7 @@ class VWAPStrategy(QCAlgorithm):
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["qqq"]
+        equities_symbols = ["crm"]
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -77,6 +77,7 @@ class VWAPStrategy(QCAlgorithm):
 
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateSecondsTime), self.CurrentTradingWindowConsolidateHandler)
             self.Consolidate(symbol, timedelta(seconds=self.ConsolidateLowPriceTime), self.LowConsolidateHandler)
+            self.Consolidate(symbol, timedelta(days=1), self.HistoryDataConsolidateHandler)
         
         self.Strategies = [BuyVWAPStrategyAction(), SellVWAPStrategyAction()]
         self.StrategiesEntriesId = {}
@@ -154,7 +155,8 @@ class VWAPStrategy(QCAlgorithm):
         if ((not vwap is None and
             not vwap.IsReady) or
             not trading_equity.CurrentTradingWindow.IsReady or
-            not trading_equity.LowPriceWindow.IsReady):
+            not trading_equity.LowPriceWindow.IsReady or
+            not trading_equity.HistoryData.IsReady):
             return True
         if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenTrades:
             return True
@@ -205,6 +207,15 @@ class VWAPStrategy(QCAlgorithm):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
         if not equity is None:
             equity.CurrentTradingWindow.Add(trade_bar)
+
+    # Region Consolidates, update rolling windows
+    def HistoryDataConsolidateHandler(self, trade_bar):
+        equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
+        if not equity is None:
+            equity.HistoryData.Add(trade_bar)
+            self.Log(self.Time)
+            self.Log(trade_bar.High)
+            self.Log(trade_bar.Low)
 
     def LowConsolidateHandler(self, trade_bar):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
@@ -444,6 +455,7 @@ class EquityTradeModel:
         self.LastBrokenCandle = None
         self.CurrentTradingWindow = None
         self.LowPriceWindow = None
+        self.HistoryData = None
 
     def Symbol(self):
         return self.__symbol
@@ -483,6 +495,7 @@ class QCEquityTradeModel(EquityTradeModel):
         self.LastBrokenCandle = None
         self.CurrentTradingWindow = RollingWindow[TradeBar](1)
         self.LowPriceWindow = RollingWindow[TradeBar](1)
+        self.HistoryData = RollingWindow[TradeBar](5)
 
         def ResetEquityLastTradeTime(self, qc_algorithm):
             self.SetLastTradeTime(qc_algorithm.Time)
