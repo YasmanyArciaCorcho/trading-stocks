@@ -13,8 +13,8 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2021, 10, 15)   # Set Start Date.
-        self.SetEndDate(2021, 10, 24)    # Set End Date.
+        self.SetStartDate(2022, 10, 15)   # Set Start Date.
+        self.SetEndDate(2022, 10, 24)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
@@ -23,6 +23,8 @@ class VWAPStrategy(QCAlgorithm):
         # Region - Initialize trading equities
         ## One equity should be traded at least.
         equities_symbols = ["crm"]
+        equities_exit_price = {}
+        equities_exit_price["crm"] = 120
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -106,12 +108,18 @@ class VWAPStrategy(QCAlgorithm):
                 self.LiquidateCurrentEquityTrade(symbol)
                 continue
 
+            if (symbol in self.StrategiesEntriesId.keys()
+                and not self.StrategiesEntriesId[symbol] is None):
+                if (symbol in self.equities_exit_price.keys()
+                and equity_current_price >= self.equities_exit_price[symbol]):
+                    self.LiquidateCurrentEquityTrade(symbol)
+
             if not self.IsOnTradeAllowedState():
                continue
 
             self.UpdateLastBrokenCandle(trading_equity)
            
-            self.TryToUpdateStopOrderPrice(trading_equity, equity_current_price)
+            # self.TryToUpdateStopOrderPrice(trading_equity, equity_current_price)
 
             if (self.stocksTrading.IsAllowToBuyByTradesPerDayCapacity(symbol)):
                 for strategy in self.Strategies:
@@ -132,7 +140,7 @@ class VWAPStrategy(QCAlgorithm):
                         ticket = strategy.PerformOrder(self, symbol, count_actions_to_buy)
                         self.stocksTrading.RegisterEntryOrder(symbol)
                         trading_equity.LasEntryOrderId = ticket.OrderId
-                        strategy.AddStopLose(self, trading_equity, count_actions_to_buy, equity_current_price)
+                        # strategy.AddStopLose(self, trading_equity, count_actions_to_buy, equity_current_price)
                         trading_equity.SetLastTradeTime(self.Time)
                         break
     
