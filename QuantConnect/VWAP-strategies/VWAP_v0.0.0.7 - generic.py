@@ -13,8 +13,8 @@ class VWAPStrategy(QCAlgorithm):
 
     def Initialize(self):
         #Region - Initialize cash flow
-        self.SetStartDate(2022, 10, 15)   # Set Start Date.
-        self.SetEndDate(2022, 10, 24)    # Set End Date.
+        self.SetStartDate(2022, 10, 20)   # Set Start Date.
+        self.SetEndDate(2022, 10, 28)    # Set End Date.
         self.SetCash(1000000)            # Set Strategy Cash.
         # The second parameter indicate the number of allowed daily trades per equity
         # By default if the second parameter is not defined there is not limited on the allowed daily trades
@@ -22,9 +22,9 @@ class VWAPStrategy(QCAlgorithm):
 
         # Region - Initialize trading equities
         ## One equity should be traded at least.
-        equities_symbols = ["crm"]
-        equities_exit_price = {}
-        equities_exit_price["crm"] = 120
+        equities_symbols = ["meta"]
+        self.equities_exit_price = {}
+        self.equities_exit_price["meta"] = 90
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -110,9 +110,10 @@ class VWAPStrategy(QCAlgorithm):
 
             if (symbol in self.StrategiesEntriesId.keys()
                 and not self.StrategiesEntriesId[symbol] is None):
-                if (symbol in self.equities_exit_price.keys()
-                and equity_current_price >= self.equities_exit_price[symbol]):
+                if (symbol.Value.lower() in self.equities_exit_price.keys()
+                and equity_current_price >= self.equities_exit_price[symbol.Value.lower()]):
                     self.LiquidateCurrentEquityTrade(symbol)
+                    continue
 
             if not self.IsOnTradeAllowedState():
                continue
@@ -163,8 +164,7 @@ class VWAPStrategy(QCAlgorithm):
         if ((not vwap is None and
             not vwap.IsReady) or
             not trading_equity.CurrentTradingWindow.IsReady or
-            not trading_equity.LowPriceWindow.IsReady or
-            not trading_equity.HistoryData.IsReady):
+            not trading_equity.LowPriceWindow.IsReady):
             return True
         if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenTrades:
             return True
@@ -221,9 +221,6 @@ class VWAPStrategy(QCAlgorithm):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
         if not equity is None:
             equity.HistoryData.Add(trade_bar)
-            self.Log(self.Time)
-            self.Log(trade_bar.High)
-            self.Log(trade_bar.Low)
 
     def LowConsolidateHandler(self, trade_bar):
         equity = self.stocksTrading.GetEquity(trade_bar.Symbol)
