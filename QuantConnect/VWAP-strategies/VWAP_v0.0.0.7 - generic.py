@@ -23,8 +23,6 @@ class VWAPStrategy(QCAlgorithm):
         # Region - Initialize trading equities
         ## One equity should be traded at least.
         equities_symbols = ["meta"]
-        self.equities_exit_price = {}
-        self.equities_exit_price["meta"] = 90
 
         for symbol in equities_symbols:
             equity = self.AddEquity(symbol, Resolution.Second)
@@ -110,8 +108,7 @@ class VWAPStrategy(QCAlgorithm):
 
             if (symbol in self.StrategiesEntriesId.keys()
                 and not self.StrategiesEntriesId[symbol] is None):
-                if (symbol.Value.lower() in self.equities_exit_price.keys()
-                and equity_current_price >= self.equities_exit_price[symbol.Value.lower()]):
+                if (equity_current_price - trading_equity.LastEntryPrice >= trading_equity.StopOrderUpdatePriceByRish):
                     self.LiquidateCurrentEquityTrade(symbol)
                     continue
 
@@ -128,7 +125,6 @@ class VWAPStrategy(QCAlgorithm):
                         and self.StrategiesEntriesId[symbol] == strategy):
                         continue
                     if strategy.ShouldEnterToBuy(self, trading_equity, equity_current_price):
-                        strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
                         if trading_equity.StopOrderUpdatePriceByRish == 0:
                             continue
                         # Liquidate if the equity is being traded.
@@ -136,6 +132,7 @@ class VWAPStrategy(QCAlgorithm):
                             and not self.StrategiesEntriesId[symbol] is None):
                             self.LiquidateCurrentEquityTrade(symbol)
 
+                        strategy.SetTradingEquityBuyPriceData(trading_equity, equity_current_price)
                         count_actions_to_buy = int(self.RiskPerTrade / trading_equity.StopOrderUpdatePriceByRish)
                         self.StrategiesEntriesId[symbol] = strategy
                         ticket = strategy.PerformOrder(self, symbol, count_actions_to_buy)
