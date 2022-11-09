@@ -39,8 +39,9 @@ class VWAPStrategy(QCAlgorithm):
         
         # Define time between trades with the same equity.
         # example if we buy we can sell or buy again after 60 seconds if
-        # TimeBetweenTrades is 60.
-        self.TimeBetweenTrades = 60
+        # TimeBetweenBuyTrades is 60.
+        self.TimeBetweenBuyTrades = 60
+        self.TimeBetweenSellTrades = 20
         
         self.IsTradeAllowed = True
         # if IsAllowToTradeByTime we can do trades.
@@ -112,6 +113,9 @@ class VWAPStrategy(QCAlgorithm):
                     self.LiquidateCurrentEquityTrade(symbol)
                     continue
 
+            if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenBuyTrades:
+                continue
+
             if not self.IsOnTradeAllowedState():
                continue
 
@@ -163,7 +167,7 @@ class VWAPStrategy(QCAlgorithm):
             not trading_equity.CurrentTradingWindow.IsReady or
             not trading_equity.LowPriceWindow.IsReady):
             return True
-        if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenTrades:
+        if (self.Time - trading_equity.LastTradeTime).total_seconds() < self.TimeBetweenSellTrades:
             return True
         return False
 
